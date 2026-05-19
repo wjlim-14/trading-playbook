@@ -1,11 +1,34 @@
 function renderDashboard() {
-  var now     = new Date();
-  var month   = now.toLocaleDateString('en-US', { month:'long', year:'numeric' });
-  var monthStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  var now      = new Date();
+  var month    = now.toLocaleDateString('en-US', { month:'long', year:'numeric' });
 
-  /* subtitle */
-  var sub = document.getElementById('dash-subtitle');
-  if (sub) sub.textContent = month;
+  /* build page shell first */
+  var root = document.getElementById('p-dashboard');
+  root.innerHTML = '<div class="page-content">' +
+    '<div class="page-header">' +
+      '<div class="page-title">Dashboard</div>' +
+      '<div class="page-subtitle" id="dash-subtitle">' + month + '</div>' +
+    '</div>' +
+
+    '<div class="grid-4 mb-16" id="dash-accounts"></div>' +
+
+    '<div class="stats-row" id="dash-stats"></div>' +
+
+    '<div class="grid-2">' +
+      '<div class="card"><div class="card-title">Cumulative P&amp;L</div><div class="chart-wrap"><canvas id="chart-pnl" height="190"></canvas></div></div>' +
+      '<div class="card"><div class="card-title">R-Multiple Distribution</div><div class="chart-wrap"><canvas id="chart-rdist" height="190"></canvas></div></div>' +
+    '</div>' +
+
+    '<div class="card mt-16"><div class="card-title">Recent Trades</div><div class="tbl-wrap"><table>' +
+      '<thead><tr><th>Date</th><th>Asset</th><th>Market</th><th>Dir</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>R</th></tr></thead>' +
+      '<tbody id="dash-recent"></tbody>' +
+    '</table></div></div>' +
+
+    '<div class="card mt-16"><div class="card-title">Open Positions</div><div class="tbl-wrap"><table>' +
+      '<thead><tr><th>Asset</th><th>Market</th><th>Dir</th><th>Entry</th><th>Current</th><th>SL</th><th>R Live</th><th>Unrealised</th></tr></thead>' +
+      '<tbody id="dash-holdings"></tbody>' +
+    '</table></div></div>' +
+  '</div>';
 
   /* ── ACCOUNT CARDS ── */
   var closed = getClosedTrades();

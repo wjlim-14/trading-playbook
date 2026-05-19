@@ -1,23 +1,32 @@
 # Current Priorities
-_Last updated: 2026-05-19_
+_Last updated: 2026-05-20_
 
-## Immediate — Dashboard Refactor (in progress)
-See `projects/PLAN.md` for full phase-by-phase build plan.
+## STATUS: Frontend COMPLETE
+All 7 pages built, tested locally, committed to git (branch: master).
+See `projects/PLAN.md` for full architecture and decisions.
 
-**Next session: start Phase 1**
-- Refactor single `index.html` into multi-file structure (css/, js/, pages/)
-- Light theme + dark sidebar
-- 8 phases total, build one at a time
+## Immediate — Deployment (do this next session)
+1. **Push to GitHub** — no remote set yet
+   ```bash
+   gh repo create trading-playbook2 --private --push --source=.
+   ```
+2. **Connect to Vercel** — vercel.com → New Project → import repo
+   - Root directory: `projects`
+   - `vercel.json` already configured (`outputDirectory: "public"`)
+3. **Verify on mobile** — open the Vercel URL on phone/tablet
 
-## Feature backlog (phases 2–8 of refactor)
-1. **Journal** — 3 confluences required, edit buttons, P&L computed not stored
-2. **Holdings** — linked to journal (open trades only), edit, risk rules merged in
-3. **Calculator** — market-specific: KLCI lots, Crypto leverage, Forex/Gold/Silver/Indices lots
-4. **Performance** — period + account filters
-5. **Settings** — 4 account management (MY/US/CR/FX), deposit/withdrawal log
-6. **Sentiment** — minimal wiring (next session detail)
+## After deployment confirmed — Backend Phase
+- **Supabase PostgreSQL** — replace in-memory mock data with real persistence
+  - JOURNAL, ACCOUNTS, TRANSACTIONS tables
+  - Vercel serverless functions as API layer
+- **Live current prices** (replaces manual update)
+  - KLCI/Bursa → Moomoo API (or Yahoo Finance fallback)
+  - US Stocks → Yahoo Finance or Alpha Vantage
+  - Crypto → CoinGecko API (free, no key needed)
+  - Forex → ExchangeRate-API or OANDA
+- **Data persistence** — trades survive page refresh
 
-## Longer term
-- Backend: connect Supabase (after frontend is confirmed satisfactory)
-- Moomoo API for live KLCI data
-- Mobile deployment via Vercel URL
+## Feature backlog (J's ideas — parked)
+- Any new UI ideas J brings up next session
+- Performance page: "Select Year" and "Select Month" period filters (currently only Overall / This Year / This Month)
+- Settings: edit account names and add new accounts

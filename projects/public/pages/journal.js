@@ -70,7 +70,7 @@ function journalModal() {
       '<div class="modal-section-label">Trade Details</div>' +
       '<div class="form-grid">' +
         '<div class="form-group"><label>Date</label><input type="date" id="m-date"></div>' +
-        '<div class="form-group"><label>Market</label><select id="m-market" onchange="_calcModalRisk()"><option>KLCI</option><option>Crypto</option><option>US Stocks</option><option>Forex</option></select></div>' +
+        '<div class="form-group"><label>Market</label><select id="m-market" onchange="_onModalMarketChange()"><option>KLCI</option><option>Crypto</option><option>US Stocks</option><option>Forex</option></select></div>' +
         '<div class="form-group"><label>Asset</label><input type="text" id="m-asset" placeholder="e.g. MAYBANK"></div>' +
         '<div class="form-group"><label>Direction</label><select id="m-dir"><option>LONG</option><option>SHORT</option></select></div>' +
       '</div>' +
@@ -80,14 +80,15 @@ function journalModal() {
         '<div class="form-group"><label>Entry Price</label><input type="number" id="m-entry" step="any" placeholder="0.00" oninput="_calcModalRisk()"></div>' +
         '<div class="form-group"><label>Stop Loss <span class="text-muted">(ref)</span></label><input type="number" id="m-sl" step="any" placeholder="0.00" oninput="_calcModalRisk()"></div>' +
         '<div class="form-group"><label>Take Profit <span class="text-muted">(ref)</span></label><input type="number" id="m-tp" step="any" placeholder="0.00"></div>' +
-        '<div class="form-group"><label>Exit Price <span class="text-muted">(blank if open)</span></label><input type="number" id="m-exit" step="any" placeholder="blank = open"></div>' +
+        '<div class="form-group"><label>Exit Price <span class="text-muted">(blank = still open)</span></label><input type="number" id="m-exit" step="any" placeholder="blank = open"></div>' +
       '</div>' +
 
       '<div class="modal-section-label">Position Size</div>' +
       '<div class="form-grid">' +
-        '<div class="form-group"><label>Units / Lots / Shares</label><input type="number" id="m-units" step="any" placeholder="0" oninput="_calcModalRisk()"></div>' +
-        '<div id="modal-risk-preview" style="display:flex;align-items:center;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:12px;color:var(--muted);"></div>' +
+        '<div class="form-group"><label id="m-units-label">Units</label><input type="number" id="m-units" step="any" placeholder="0" oninput="_calcModalRisk()"></div>' +
+        '<div class="form-group"><label>Current Price <span class="text-muted">(open trades only)</span></label><input type="number" id="m-currentPrice" step="any" placeholder="live price for unrealised P&L"></div>' +
       '</div>' +
+      '<div id="modal-risk-preview" style="margin-top:-8px;margin-bottom:4px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:12px;color:var(--muted);"></div>' +
 
       '<div class="modal-section-label">Confluences <span class="text-muted" style="font-size:11px;text-transform:none;letter-spacing:0;">(all 3 required)</span></div>' +
       '<div class="form-grid" style="grid-template-columns:1fr;">' +
@@ -140,40 +141,56 @@ function openTradeModal(id) {
     document.getElementById('m-sl').value     = t.sl || '';
     document.getElementById('m-tp').value     = t.tp || '';
     document.getElementById('m-exit').value   = t.exit || '';
-    document.getElementById('m-units').value  = t.units || '';
-    document.getElementById('m-c1').value     = t.confluence1 || '';
-    document.getElementById('m-c2').value     = t.confluence2 || '';
-    document.getElementById('m-c3').value     = t.confluence3 || '';
-    document.getElementById('m-mood').value   = t.mood || 'Calm';
-    document.getElementById('m-review').value = t.review || '';
+    document.getElementById('m-units').value        = t.units || '';
+    document.getElementById('m-currentPrice').value = t.currentPrice || '';
+    document.getElementById('m-c1').value           = t.confluence1 || '';
+    document.getElementById('m-c2').value           = t.confluence2 || '';
+    document.getElementById('m-c3').value           = t.confluence3 || '';
+    document.getElementById('m-mood').value         = t.mood || 'Calm';
+    document.getElementById('m-review').value       = t.review || '';
     document.getElementById('modal-delete-btn').style.display = 'inline-flex';
   } else {
     document.getElementById('modal-trade-title').textContent = 'Log Trade';
-    document.getElementById('m-date').value   = today;
-    document.getElementById('m-market').value = 'KLCI';
-    document.getElementById('m-asset').value  = '';
-    document.getElementById('m-dir').value    = 'LONG';
-    document.getElementById('m-entry').value  = '';
-    document.getElementById('m-sl').value     = '';
-    document.getElementById('m-tp').value     = '';
-    document.getElementById('m-exit').value   = '';
-    document.getElementById('m-units').value  = '';
-    document.getElementById('m-c1').value     = '';
-    document.getElementById('m-c2').value     = '';
-    document.getElementById('m-c3').value     = '';
-    document.getElementById('m-mood').value   = 'Calm';
-    document.getElementById('m-review').value = '';
+    document.getElementById('m-date').value         = today;
+    document.getElementById('m-market').value       = 'KLCI';
+    document.getElementById('m-asset').value        = '';
+    document.getElementById('m-dir').value          = 'LONG';
+    document.getElementById('m-entry').value        = '';
+    document.getElementById('m-sl').value           = '';
+    document.getElementById('m-tp').value           = '';
+    document.getElementById('m-exit').value         = '';
+    document.getElementById('m-units').value        = '';
+    document.getElementById('m-currentPrice').value = '';
+    document.getElementById('m-c1').value           = '';
+    document.getElementById('m-c2').value           = '';
+    document.getElementById('m-c3').value           = '';
+    document.getElementById('m-mood').value         = 'Calm';
+    document.getElementById('m-review').value       = '';
     document.getElementById('modal-delete-btn').style.display = 'none';
   }
 
   document.getElementById('modal-error').style.display = 'none';
-  _calcModalRisk();
+  _onModalMarketChange();
 }
 
 function closeTradeModal() {
   var overlay = document.getElementById('modal-trade');
   if (overlay) overlay.classList.remove('open');
   _editingTradeId = null;
+}
+
+var _UNIT_LABELS = {
+  'KLCI':      'Shares <span class="text-muted" style="font-size:11px;">(1 lot = 100 shares)</span>',
+  'US Stocks': 'Shares',
+  'Crypto':    'Coins',
+  'Forex':     'Units <span class="text-muted" style="font-size:11px;">(1 std lot = 100,000)</span>'
+};
+
+function _onModalMarketChange() {
+  var market = (document.getElementById('m-market') || {}).value || 'KLCI';
+  var label  = document.getElementById('m-units-label');
+  if (label) label.innerHTML = _UNIT_LABELS[market] || 'Units';
+  _calcModalRisk();
 }
 
 function _calcModalRisk() {
@@ -231,24 +248,26 @@ function saveTrade() {
       JOURNAL[idx].confluence1 = c1;
       JOURNAL[idx].confluence2 = c2;
       JOURNAL[idx].confluence3 = c3;
-      JOURNAL[idx].mood        = document.getElementById('m-mood').value;
-      JOURNAL[idx].review      = document.getElementById('m-review').value || null;
-      if (exit != null) JOURNAL[idx].currentPrice = null;
+      JOURNAL[idx].mood         = document.getElementById('m-mood').value;
+      JOURNAL[idx].review       = document.getElementById('m-review').value || null;
+      var cp = parseFloat(document.getElementById('m-currentPrice').value) || null;
+      JOURNAL[idx].currentPrice = exit != null ? null : cp;
     }
   } else {
+    var cp2 = parseFloat(document.getElementById('m-currentPrice').value) || null;
     JOURNAL.push({
-      id:          nextId(),
-      date:        document.getElementById('m-date').value,
-      accountId:   acct ? acct.id : 'my',
-      market:      market,
-      asset:       asset,
-      dir:         document.getElementById('m-dir').value,
-      entry:       entry,
-      sl:          sl,
-      tp:          tp,
-      exit:        exit,
-      units:       units,
-      currentPrice:null,
+      id:           nextId(),
+      date:         document.getElementById('m-date').value,
+      accountId:    acct ? acct.id : 'my',
+      market:       market,
+      asset:        asset,
+      dir:          document.getElementById('m-dir').value,
+      entry:        entry,
+      sl:           sl,
+      tp:           tp,
+      exit:         exit,
+      units:        units,
+      currentPrice: cp2,
       confluence1: c1,
       confluence2: c2,
       confluence3: c3,
