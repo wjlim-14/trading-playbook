@@ -9,6 +9,7 @@ window.addEventListener('load', function() {
   _initData().then(function() {
     clearTimeout(loaderTimeout);
     _renderSidebarFooter();
+    _setLastUpdated();
     nav('p-dashboard');
     if (loader) loader.style.display = 'none';
   });
@@ -28,6 +29,30 @@ function _initData() {
     _apiAvailable = true;
   }).catch(function(e) {
     console.warn('[J.Tradebook] API unavailable — using mock data', e);
+  });
+}
+
+function _setLastUpdated() {
+  var el = document.getElementById('sb-last-updated');
+  if (!el) return;
+  var d  = new Date();
+  var yy = d.getFullYear();
+  var mo = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  var hh = String(d.getHours()).padStart(2, '0');
+  var mi = String(d.getMinutes()).padStart(2, '0');
+  var ss = String(d.getSeconds()).padStart(2, '0');
+  el.textContent = yy + '-' + mo + '-' + dd + ' ' + hh + ':' + mi + ':' + ss;
+}
+
+function _refreshData() {
+  var btn = document.getElementById('sb-refresh-btn');
+  if (btn) btn.style.opacity = '0.4';
+  _initData().then(function() {
+    _renderSidebarFooter();
+    refreshCurrentPage();
+    _setLastUpdated();
+    if (btn) btn.style.opacity = '1';
   });
 }
 
