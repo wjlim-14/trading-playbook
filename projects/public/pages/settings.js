@@ -44,6 +44,25 @@ function renderSettings() {
         '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeDepositModal()">Cancel</button><button class="btn btn-primary" onclick="saveTransaction()">Save</button></div>' +
       '</div>' +
     '</div>' +
+
+    /* account edit / add modal */
+    '<div id="modal-acct" class="modal-overlay">' +
+      '<div class="modal" style="max-width:440px;">' +
+        '<div class="modal-header"><div class="modal-title" id="acct-modal-title">Edit Account</div><span class="modal-close" onclick="closeAcctModal()">✕</span></div>' +
+        '<div class="form-grid" style="grid-template-columns:1fr;">' +
+          '<div class="form-group"><label>Account Name</label><input type="text" id="acct-name" placeholder="e.g. Malaysia Stocks"></div>' +
+          '<div class="form-group"><label>Currency Code</label><input type="text" id="acct-currency" placeholder="e.g. MYR, USD, USDT" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"></div>' +
+          '<div class="form-group"><label>Symbol</label><input type="text" id="acct-symbol" placeholder="e.g. RM, $, ₮"></div>' +
+          '<div class="form-group" id="acct-equity-group"><label>Initial Equity</label><input type="number" id="acct-equity-init" step="any" placeholder="0.00"></div>' +
+        '</div>' +
+        '<div id="acct-modal-error" style="display:none;" class="alert alert-danger mb-0"></div>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-ghost" onclick="closeAcctModal()">Cancel</button>' +
+          '<button class="btn btn-primary" onclick="saveAcct()">Save</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
   '</div>';
 
   _renderAccountCards();
@@ -53,14 +72,18 @@ function renderSettings() {
 function _renderAccountCards() {
   var el = document.getElementById('settings-accounts');
   if (!el) return;
-  el.innerHTML = ACCOUNTS.map(function(a) {
+
+  var cards = ACCOUNTS.map(function(a) {
     var txs       = TRANSACTIONS.filter(function(t){ return t.accountId === a.id; });
     var totalDep  = txs.filter(function(t){ return t.type==='deposit'; }).reduce(function(s,t){ return s+t.amount; }, 0);
     var totalWith = txs.filter(function(t){ return t.type==='withdrawal'; }).reduce(function(s,t){ return s+Math.abs(t.amount); }, 0);
     return '<div class="acct-settings-card">' +
       '<div class="acct-settings-header">' +
         '<div><span class="acct-settings-name">' + a.name + '</span><span class="acct-settings-cur">' + a.currency + '</span></div>' +
-        '<button class="btn btn-ghost btn-sm" onclick="openDepositModal(\'' + a.id + '\',\'deposit\')">＋</button>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<button class="edit-btn" onclick="openAcctModal(\'' + a.id + '\')" title="Edit account">✏</button>' +
+          '<button class="btn btn-ghost btn-sm" onclick="openDepositModal(\'' + a.id + '\',\'deposit\')">＋</button>' +
+        '</div>' +
       '</div>' +
       '<div id="acct-eq-' + a.id + '">' +
         '<div class="acct-settings-eq">' + a.symbol + fmt(a.equity, 0) + '</div>' +
@@ -76,9 +99,85 @@ function _renderAccountCards() {
         '<button class="btn btn-ghost btn-sm" onclick="_editEquity(\'' + a.id + '\')">Edit Equity</button>' +
       '</div>' +
     '</div>';
-  }).join('');
+  });
+
+  /* add account card */
+  cards.push(
+    '<div class="acct-settings-card" style="display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px dashed var(--border);background:transparent;min-height:160px;" onclick="openAcctModal(null)">' +
+      '<div style="text-align:center;color:var(--muted);">' +
+        '<div style="font-size:28px;line-height:1;margin-bottom:8px;">+</div>' +
+        '<div style="font-size:13px;font-weight:500;">Add Account</div>' +
+      '</div>' +
+    '</div>'
+  );
+
+  el.innerHTML = cards.join('');
 }
 
+/* ── ACCOUNT MODAL ── */
+var _editingAcctId = null;
+
+function openAcctModal(id) {
+  _editingAcctId = id;
+  var titleEl   = document.getElementById('acct-modal-title');
+  var eqGroup   = document.getElementById('acct-equity-group');
+  var errEl     = document.getElementById('acct-modal-error');
+
+  errEl.style.display = 'none';
+
+  if (id) {
+    /* edit mode */
+    var a = getAccount(id);
+    if (!a) return;
+    titleEl.textContent = 'Edit Account';
+    document.getElementById('acct-name').value     = a.name;
+    document.getElementById('acct-currency').value = a.currency;
+    document.getElementById('acct-symbol').value   = a.symbol;
+    eqGroup.style.display = 'none';
+  } else {
+    /* add mode */
+    titleEl.textContent = 'Add Account';
+    document.getElementById('acct-name').value         = '';
+    document.getElementById('acct-currency').value     = '';
+    document.getElementById('acct-symbol').value       = '';
+    document.getElementById('acct-equity-init').value  = '';
+    eqGroup.style.display = '';
+  }
+
+  document.getElementById('modal-acct').classList.add('open');
+}
+
+function closeAcctModal() {
+  document.getElementById('modal-acct').classList.remove('open');
+  _editingAcctId = null;
+}
+
+function saveAcct() {
+  var name     = document.getElementById('acct-name').value.trim();
+  var currency = document.getElementById('acct-currency').value.trim().toUpperCase();
+  var symbol   = document.getElementById('acct-symbol').value.trim();
+  var errEl    = document.getElementById('acct-modal-error');
+
+  if (!name)     { errEl.textContent = 'Account name is required.';  errEl.style.display='flex'; return; }
+  if (!currency) { errEl.textContent = 'Currency code is required.'; errEl.style.display='flex'; return; }
+  if (!symbol)   { errEl.textContent = 'Symbol is required.';        errEl.style.display='flex'; return; }
+
+  if (_editingAcctId) {
+    /* update existing */
+    var a = getAccount(_editingAcctId);
+    if (a) { a.name = name; a.currency = currency; a.symbol = symbol; }
+  } else {
+    /* add new */
+    var equity = parseFloat(document.getElementById('acct-equity-init').value) || 0;
+    var newId  = 'acct_' + Date.now();
+    ACCOUNTS.push({ id: newId, name: name, currency: currency, symbol: symbol, equity: equity });
+  }
+
+  closeAcctModal();
+  renderSettings();
+}
+
+/* ── TRANSACTION TABLE ── */
 function _renderTxTable() {
   var filter = (document.getElementById('tx-filter') || {}).value || '';
   var txs    = filter ? TRANSACTIONS.filter(function(t){ return t.accountId === filter; }) : TRANSACTIONS;
@@ -99,6 +198,7 @@ function _renderTxTable() {
   }).join('') : '<tr><td colspan="6" class="empty-state">No transactions.</td></tr>';
 }
 
+/* ── DEPOSIT / WITHDRAW MODAL ── */
 var _depositMeta = {};
 
 function openDepositModal(accountId, type) {
@@ -115,13 +215,13 @@ function closeDepositModal() {
 }
 
 function saveTransaction() {
-  var amount  = parseFloat(document.getElementById('dep-amount').value);
-  var note    = document.getElementById('dep-note').value;
+  var amount = parseFloat(document.getElementById('dep-amount').value);
+  var note   = document.getElementById('dep-note').value;
   if (!amount || amount <= 0) { alert('Enter a valid amount.'); return; }
 
-  var acct    = getAccount(_depositMeta.accountId);
-  var isWith  = _depositMeta.type === 'withdrawal';
-  var change  = isWith ? -amount : amount;
+  var acct   = getAccount(_depositMeta.accountId);
+  var isWith = _depositMeta.type === 'withdrawal';
+  var change = isWith ? -amount : amount;
   if (acct) acct.equity = Math.max(0, acct.equity + change);
 
   var lastTx  = TRANSACTIONS.filter(function(t){ return t.accountId === _depositMeta.accountId; });
