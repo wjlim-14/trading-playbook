@@ -5,15 +5,9 @@ _Last updated: 2026-05-20_
 All 7 pages built, tested locally, committed to git (branch: master).
 See `projects/PLAN.md` for full architecture and decisions.
 
-## Immediate — Deployment (do this next session)
-1. **Push to GitHub** — no remote set yet
-   ```bash
-   gh repo create trading-playbook2 --private --push --source=.
-   ```
-2. **Connect to Vercel** — vercel.com → New Project → import repo
-   - Root directory: `projects`
-   - `vercel.json` already configured (`outputDirectory: "public"`)
-3. **Verify on mobile** — open the Vercel URL on phone/tablet
+## Deployment — DONE
+- GitHub: https://github.com/wjlim-14/trading-playbook2
+- Live URL: **https://jtradebook.vercel.app**
 
 ## After deployment confirmed — Backend Phase
 - **Supabase PostgreSQL** — replace in-memory mock data with real persistence
