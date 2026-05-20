@@ -126,7 +126,7 @@ function journalModal() {
       '<div class="form-group" style="margin-bottom:0;">' +
         '<label class="screenshot-upload-label" id="m-screenshot-label" onclick="document.getElementById(\'m-screenshot-input\').click()" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;color:var(--muted);font-size:13px;background:var(--surface2);">' +
           '<span style="font-size:18px;">📎</span>' +
-          '<span id="m-screenshot-name">Attach chart screenshot...</span>' +
+          '<span id="m-screenshot-name">Attach chart screenshot or ⌘V to paste...</span>' +
         '</label>' +
         '<input type="file" id="m-screenshot-input" accept="image/*" style="display:none;" onchange="_onScreenshotSelected(this)">' +
         '<div id="m-screenshot-preview" style="display:none;margin-top:8px;">' +
@@ -249,33 +249,63 @@ function _setSelectedTfs(tfsStr) {
   });
 }
 
-var _screenshotFile = null;
+var _screenshotDataUrl    = null;
 var _screenshotExistingUrl = null;
 
-function _onScreenshotSelected(input) {
-  var file = input.files[0];
-  if (!file) return;
-  if (file.size > 3 * 1024 * 1024) {
-    alert('Image too large — max 3MB. Please crop to the chart area only.');
-    input.value = '';
-    return;
-  }
-  _screenshotFile = file;
+/* compress image to JPEG below 1MB using canvas */
+function _compressImage(dataUrl, callback) {
+  var img = new Image();
+  img.onload = function() {
+    var maxW = 1920, maxH = 1080;
+    var w = img.width, h = img.height;
+    if (w > maxW || h > maxH) {
+      var ratio = Math.min(maxW / w, maxH / h);
+      w = Math.round(w * ratio);
+      h = Math.round(h * ratio);
+    }
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+    var qualities = [0.8, 0.65, 0.5, 0.35];
+    var result;
+    for (var i = 0; i < qualities.length; i++) {
+      result = canvas.toDataURL('image/jpeg', qualities[i]);
+      if (result.length * 0.75 < 1024 * 1024) break;
+    }
+    callback(result);
+  };
+  img.src = dataUrl;
+}
+
+/* shared handler for both file-picker and paste */
+function _processScreenshotFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
   var reader = new FileReader();
   reader.onload = function(e) {
-    document.getElementById('m-screenshot-img').src = e.target.result;
-    document.getElementById('m-screenshot-preview').style.display = 'block';
-    document.getElementById('m-screenshot-name').textContent = file.name;
+    _compressImage(e.target.result, function(compressed) {
+      _screenshotDataUrl = compressed;
+      _screenshotExistingUrl = null;
+      document.getElementById('m-screenshot-img').src = compressed;
+      document.getElementById('m-screenshot-preview').style.display = 'block';
+      var kb = Math.round(compressed.length * 0.75 / 1024);
+      document.getElementById('m-screenshot-name').textContent = file.name + ' (' + kb + ' KB, compressed)';
+    });
   };
   reader.readAsDataURL(file);
 }
 
+function _onScreenshotSelected(input) {
+  var file = input.files[0];
+  if (file) _processScreenshotFile(file);
+}
+
 function _clearScreenshot() {
-  _screenshotFile = null;
+  _screenshotDataUrl = null;
   _screenshotExistingUrl = null;
   document.getElementById('m-screenshot-input').value = '';
   document.getElementById('m-screenshot-preview').style.display = 'none';
-  document.getElementById('m-screenshot-name').textContent = 'Attach chart screenshot...';
+  document.getElementById('m-screenshot-name').textContent = 'Attach chart screenshot or ⌘V to paste...';
 }
 
 function _loadScreenshotPreview(url) {
@@ -287,21 +317,30 @@ function _loadScreenshotPreview(url) {
 }
 
 function _uploadScreenshot() {
-  if (!_screenshotFile) return Promise.resolve(_screenshotExistingUrl || null);
-  return new Promise(function(resolve, reject) {
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: e.target.result, name: _screenshotFile.name })
-      }).then(function(r) { return r.json(); })
-        .then(function(res) { resolve(res.url || null); })
-        .catch(function(err) { console.warn('Upload failed', err); resolve(null); });
-    };
-    reader.readAsDataURL(_screenshotFile);
-  });
+  if (!_screenshotDataUrl) return Promise.resolve(_screenshotExistingUrl || null);
+  return fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: _screenshotDataUrl, name: 'chart.jpg' })
+  }).then(function(r) { return r.json(); })
+    .then(function(res) { return res.url || null; })
+    .catch(function(err) { console.warn('Upload failed', err); return null; });
 }
+
+/* paste listener — active whenever the trade modal is open */
+document.addEventListener('paste', function(e) {
+  var modal = document.getElementById('modal-trade');
+  if (!modal || !modal.classList.contains('open')) return;
+  var items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type.startsWith('image/')) {
+      e.preventDefault();
+      _processScreenshotFile(items[i].getAsFile());
+      break;
+    }
+  }
+});
 
 var _UNIT_LABELS = {
   'KLCI':      'Shares <span class="text-muted" style="font-size:11px;">(1 lot = 100 shares)</span>',
