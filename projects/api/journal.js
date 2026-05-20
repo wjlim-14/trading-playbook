@@ -30,7 +30,8 @@ function toDb(t) {
     confluence3: t.confluence3,
     mood:        t.mood,
     review:      t.review,
-    timeframes:  t.timeframes || null
+    timeframes:    t.timeframes    || null,
+    screenshot_url: t.screenshotUrl || null
   };
 }
 
@@ -53,7 +54,8 @@ function fromDb(row) {
     confluence3:  row.confluence3 || '',
     mood:         row.mood,
     review:       row.review,
-    timeframes:   row.timeframes || null
+    timeframes:    row.timeframes     || null,
+    screenshotUrl: row.screenshot_url || null
   };
 }
 

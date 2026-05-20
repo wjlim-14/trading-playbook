@@ -65,7 +65,10 @@ function _applyJournalFilters() {
       '<td>' + rHtml(r) + '</td>' +
       '<td><span class="' + moodClass(t.mood) + '">' + t.mood + '</span></td>' +
       '<td>' + statusBadge(t) + '</td>' +
-      '<td><button class="edit-btn" onclick="openTradeModal(' + t.id + ')" title="Edit">✏</button></td>' +
+      '<td style="white-space:nowrap;">' +
+        (t.screenshotUrl ? '<a href="' + t.screenshotUrl + '" target="_blank" title="View screenshot" style="margin-right:4px;font-size:14px;text-decoration:none;">📷</a>' : '') +
+        '<button class="edit-btn" onclick="openTradeModal(' + t.id + ')" title="Edit">✏</button>' +
+      '</td>' +
     '</tr>';
   }).join('') : '<tr><td colspan="15" class="empty-state">No trades match the filter</td></tr>';
 }
@@ -79,6 +82,14 @@ function journalModal() {
         '<span class="modal-close" onclick="closeTradeModal()">✕</span>' +
       '</div>' +
 
+      '<div class="modal-section-label">Trade Details</div>' +
+      '<div class="form-grid">' +
+        '<div class="form-group"><label>Date</label><input type="date" id="m-date"></div>' +
+        '<div class="form-group"><label>Market</label><select id="m-market" onchange="_onModalMarketChange()"><option>KLCI</option><option>Crypto</option><option>US Stocks</option><option>Forex</option></select></div>' +
+        '<div class="form-group"><label>Asset</label><input type="text" id="m-asset" placeholder="e.g. MAYBANK"></div>' +
+        '<div class="form-group"><label>Direction</label><select id="m-dir"><option>LONG</option><option>SHORT</option></select></div>' +
+      '</div>' +
+
       '<div class="modal-section-label">Timeframes <span class="text-muted" style="font-size:11px;text-transform:none;letter-spacing:0;">(select 2 or more)</span></div>' +
       '<div class="form-group" style="margin-bottom:0;">' +
         '<div class="tf-options" id="tf-options">' +
@@ -87,14 +98,6 @@ function journalModal() {
           }).join('') +
         '</div>' +
         '<div id="tf-error" style="display:none;font-size:11px;color:var(--red);margin-top:6px;">Select at least 2 timeframes.</div>' +
-      '</div>' +
-
-      '<div class="modal-section-label">Trade Details</div>' +
-      '<div class="form-grid">' +
-        '<div class="form-group"><label>Date</label><input type="date" id="m-date"></div>' +
-        '<div class="form-group"><label>Market</label><select id="m-market" onchange="_onModalMarketChange()"><option>KLCI</option><option>Crypto</option><option>US Stocks</option><option>Forex</option></select></div>' +
-        '<div class="form-group"><label>Asset</label><input type="text" id="m-asset" placeholder="e.g. MAYBANK"></div>' +
-        '<div class="form-group"><label>Direction</label><select id="m-dir"><option>LONG</option><option>SHORT</option></select></div>' +
       '</div>' +
 
       '<div class="modal-section-label">Price Levels</div>' +
@@ -117,6 +120,19 @@ function journalModal() {
         '<div class="form-group"><label class="req">Confluence 1</label><input type="text" id="m-c1" placeholder="e.g. SMA26 > SMA69 on Weekly (HTF uptrend)"></div>' +
         '<div class="form-group"><label class="req">Confluence 2</label><input type="text" id="m-c2" placeholder="e.g. Daily body zone entry after SMA26 retest"></div>' +
         '<div class="form-group"><label class="req">Confluence 3</label><input type="text" id="m-c3" placeholder="e.g. Volume confirmation / sector strength"></div>' +
+      '</div>' +
+
+      '<div class="modal-section-label">Chart Screenshot <span class="text-muted" style="font-size:11px;text-transform:none;letter-spacing:0;">(optional)</span></div>' +
+      '<div class="form-group" style="margin-bottom:0;">' +
+        '<label class="screenshot-upload-label" id="m-screenshot-label" onclick="document.getElementById(\'m-screenshot-input\').click()" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;color:var(--muted);font-size:13px;background:var(--surface2);">' +
+          '<span style="font-size:18px;">📎</span>' +
+          '<span id="m-screenshot-name">Attach chart screenshot...</span>' +
+        '</label>' +
+        '<input type="file" id="m-screenshot-input" accept="image/*" style="display:none;" onchange="_onScreenshotSelected(this)">' +
+        '<div id="m-screenshot-preview" style="display:none;margin-top:8px;">' +
+          '<img id="m-screenshot-img" style="max-width:100%;max-height:180px;border-radius:var(--radius-sm);border:1px solid var(--border);object-fit:contain;" alt="chart">' +
+          '<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="_clearScreenshot()">Remove</button>' +
+        '</div>' +
       '</div>' +
 
       '<div class="modal-section-label">Review</div>' +
@@ -171,6 +187,8 @@ function openTradeModal(id) {
     document.getElementById('m-mood').value         = t.mood || 'Calm';
     document.getElementById('m-review').value       = t.review || '';
     _setSelectedTfs(t.timeframes || '');
+    _clearScreenshot();
+    if (t.screenshotUrl) _loadScreenshotPreview(t.screenshotUrl);
     document.getElementById('modal-delete-btn').style.display = 'inline-flex';
   } else {
     document.getElementById('modal-trade-title').textContent = 'Log Trade';
@@ -190,6 +208,7 @@ function openTradeModal(id) {
     document.getElementById('m-mood').value         = 'Calm';
     document.getElementById('m-review').value       = '';
     _setSelectedTfs('');
+    _clearScreenshot();
     document.getElementById('modal-delete-btn').style.display = 'none';
   }
 
@@ -230,6 +249,60 @@ function _setSelectedTfs(tfsStr) {
   });
 }
 
+var _screenshotFile = null;
+var _screenshotExistingUrl = null;
+
+function _onScreenshotSelected(input) {
+  var file = input.files[0];
+  if (!file) return;
+  if (file.size > 3 * 1024 * 1024) {
+    alert('Image too large — max 3MB. Please crop to the chart area only.');
+    input.value = '';
+    return;
+  }
+  _screenshotFile = file;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('m-screenshot-img').src = e.target.result;
+    document.getElementById('m-screenshot-preview').style.display = 'block';
+    document.getElementById('m-screenshot-name').textContent = file.name;
+  };
+  reader.readAsDataURL(file);
+}
+
+function _clearScreenshot() {
+  _screenshotFile = null;
+  _screenshotExistingUrl = null;
+  document.getElementById('m-screenshot-input').value = '';
+  document.getElementById('m-screenshot-preview').style.display = 'none';
+  document.getElementById('m-screenshot-name').textContent = 'Attach chart screenshot...';
+}
+
+function _loadScreenshotPreview(url) {
+  if (!url) return;
+  _screenshotExistingUrl = url;
+  document.getElementById('m-screenshot-img').src = url;
+  document.getElementById('m-screenshot-preview').style.display = 'block';
+  document.getElementById('m-screenshot-name').textContent = 'Screenshot attached';
+}
+
+function _uploadScreenshot() {
+  if (!_screenshotFile) return Promise.resolve(_screenshotExistingUrl || null);
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: e.target.result, name: _screenshotFile.name })
+      }).then(function(r) { return r.json(); })
+        .then(function(res) { resolve(res.url || null); })
+        .catch(function(err) { console.warn('Upload failed', err); resolve(null); });
+    };
+    reader.readAsDataURL(_screenshotFile);
+  });
+}
+
 var _UNIT_LABELS = {
   'KLCI':      'Shares <span class="text-muted" style="font-size:11px;">(1 lot = 100 shares)</span>',
   'US Stocks': 'Shares',
@@ -266,6 +339,8 @@ function _calcModalRisk() {
 function saveTrade() {
   var errEl = document.getElementById('modal-error');
   errEl.style.display = 'none';
+  var saveBtn = document.querySelector('#modal-trade .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
 
   var asset = document.getElementById('m-asset').value.trim().toUpperCase();
   var c1    = document.getElementById('m-c1').value.trim();
@@ -273,9 +348,9 @@ function saveTrade() {
   var c3    = document.getElementById('m-c3').value.trim();
 
   var tfs = _getSelectedTfs();
-  if (!asset)         { _showModalError('Asset name is required.'); return; }
-  if (tfs.length < 2) { document.getElementById('tf-error').style.display = 'block'; return; }
-  if (!c1 || !c2 || !c3) { _showModalError('All 3 confluences are required before logging a trade.'); return; }
+  if (!asset)         { _resetSaveBtn(); _showModalError('Asset name is required.'); return; }
+  if (tfs.length < 2) { _resetSaveBtn(); document.getElementById('tf-error').style.display = 'block'; return; }
+  if (!c1 || !c2 || !c3) { _resetSaveBtn(); _showModalError('All 3 confluences are required before logging a trade.'); return; }
 
   var entry  = parseFloat(document.getElementById('m-entry').value) || null;
   var sl     = parseFloat(document.getElementById('m-sl').value)    || null;
@@ -285,57 +360,69 @@ function saveTrade() {
   var market = document.getElementById('m-market').value;
   var acct   = getAccountForMarket(market);
 
-  if (_editingTradeId) {
-    var idx = JOURNAL.findIndex(function(x){ return x.id === _editingTradeId; });
-    if (idx !== -1) {
-      JOURNAL[idx].date        = document.getElementById('m-date').value;
-      JOURNAL[idx].market      = market;
-      JOURNAL[idx].accountId   = acct ? acct.id : 'my';
-      JOURNAL[idx].asset       = asset;
-      JOURNAL[idx].dir         = document.getElementById('m-dir').value;
-      JOURNAL[idx].entry       = entry;
-      JOURNAL[idx].sl          = sl;
-      JOURNAL[idx].tp          = tp;
-      JOURNAL[idx].exit        = exit;
-      JOURNAL[idx].units       = units;
-      JOURNAL[idx].confluence1 = c1;
-      JOURNAL[idx].confluence2 = c2;
-      JOURNAL[idx].confluence3 = c3;
-      JOURNAL[idx].mood         = document.getElementById('m-mood').value;
-      JOURNAL[idx].review       = document.getElementById('m-review').value || null;
-      JOURNAL[idx].timeframes   = tfs.join(',');
-      var cp = parseFloat(document.getElementById('m-currentPrice').value) || null;
-      JOURNAL[idx].currentPrice = exit != null ? null : cp;
-      if (_apiAvailable) _apiSyncTrade('PATCH', JOURNAL[idx]);
-    }
-  } else {
-    var cp2 = parseFloat(document.getElementById('m-currentPrice').value) || null;
-    var newTrade = {
-      id:           nextId(),
-      date:         document.getElementById('m-date').value,
-      accountId:    acct ? acct.id : 'my',
-      market:       market,
-      asset:        asset,
-      dir:          document.getElementById('m-dir').value,
-      entry:        entry,
-      sl:           sl,
-      tp:           tp,
-      exit:         exit,
-      units:        units,
-      currentPrice: cp2,
-      confluence1:  c1,
-      confluence2:  c2,
-      confluence3:  c3,
-      timeframes:   tfs.join(','),
-      mood:         document.getElementById('m-mood').value,
-      review:       document.getElementById('m-review').value || null
-    };
-    JOURNAL.push(newTrade);
-    if (_apiAvailable) _apiSyncTrade('POST', newTrade);
-  }
+  var mood   = document.getElementById('m-mood').value;
+  var review = document.getElementById('m-review').value || null;
+  var cp     = parseFloat(document.getElementById('m-currentPrice').value) || null;
 
-  closeTradeModal();
-  refreshCurrentPage();
+  _uploadScreenshot().then(function(screenshotUrl) {
+    if (_editingTradeId) {
+      var idx = JOURNAL.findIndex(function(x){ return x.id === _editingTradeId; });
+      if (idx !== -1) {
+        JOURNAL[idx].date          = document.getElementById('m-date').value;
+        JOURNAL[idx].market        = market;
+        JOURNAL[idx].accountId     = acct ? acct.id : 'my';
+        JOURNAL[idx].asset         = asset;
+        JOURNAL[idx].dir           = document.getElementById('m-dir').value;
+        JOURNAL[idx].entry         = entry;
+        JOURNAL[idx].sl            = sl;
+        JOURNAL[idx].tp            = tp;
+        JOURNAL[idx].exit          = exit;
+        JOURNAL[idx].units         = units;
+        JOURNAL[idx].confluence1   = c1;
+        JOURNAL[idx].confluence2   = c2;
+        JOURNAL[idx].confluence3   = c3;
+        JOURNAL[idx].timeframes    = tfs.join(',');
+        JOURNAL[idx].mood          = mood;
+        JOURNAL[idx].review        = review;
+        JOURNAL[idx].currentPrice  = exit != null ? null : cp;
+        if (screenshotUrl) JOURNAL[idx].screenshotUrl = screenshotUrl;
+        if (_apiAvailable) _apiSyncTrade('PATCH', JOURNAL[idx]);
+      }
+    } else {
+      var newTrade = {
+        id:            nextId(),
+        date:          document.getElementById('m-date').value,
+        accountId:     acct ? acct.id : 'my',
+        market:        market,
+        asset:         asset,
+        dir:           document.getElementById('m-dir').value,
+        entry:         entry,
+        sl:            sl,
+        tp:            tp,
+        exit:          exit,
+        units:         units,
+        currentPrice:  cp,
+        confluence1:   c1,
+        confluence2:   c2,
+        confluence3:   c3,
+        timeframes:    tfs.join(','),
+        screenshotUrl: screenshotUrl,
+        mood:          mood,
+        review:        review
+      };
+      JOURNAL.push(newTrade);
+      if (_apiAvailable) _apiSyncTrade('POST', newTrade);
+    }
+
+    _resetSaveBtn();
+    closeTradeModal();
+    refreshCurrentPage();
+  });
+}
+
+function _resetSaveBtn() {
+  var saveBtn = document.querySelector('#modal-trade .btn-primary');
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Trade'; }
 }
 
 function deleteTrade() {
