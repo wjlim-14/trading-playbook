@@ -303,6 +303,24 @@ canvas { display: block; width: 100% !important; }
 /* ── REFERENCE CELL (SL/TP in journal) ── */
 .td-ref { color: var(--muted2); font-family: var(--font-mono); font-size: 11px; }
 
+/* ── TIMEFRAME MULTI-SELECT BUTTONS ── */
+.tf-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.tf-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.12s;
+  line-height: 1.4;
+}
+.tf-btn:hover { border-color: var(--gold); color: var(--text); }
+.tf-btn.tf-active { background: var(--gold); border-color: var(--gold); color: #fff; font-weight: 600; }
+
 /* ── OPEN TRADE ROW ── */
 .row-open td { background: rgba(196,154,32,0.04); }
 .row-open:hover td { background: rgba(196,154,32,0.08) !important; }

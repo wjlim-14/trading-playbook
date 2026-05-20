@@ -1,20 +1,23 @@
+var _pf = { period: 'all', acct: '', yearVal: '', monthVal: '' };
+
 function renderPerformance() {
   var root = document.getElementById('p-perf');
   root.innerHTML = '<div class="page-content">' +
     '<div class="page-header-row page-header">' +
       '<div><div class="page-title">Performance</div><div class="page-subtitle">Pattern analysis — closed trades only</div></div>' +
-      '<div class="filter-bar" style="margin:0;">' +
-        '<select class="filter-select" id="pf-period" onchange="_renderPerfData()">' +
+      '<div class="filter-bar" style="margin:0;flex-wrap:wrap;">' +
+        '<select class="filter-select" id="pf-period" onchange="_onPerfPeriodChange()">' +
           '<option value="all">Overall</option>' +
           '<option value="year">This Year</option>' +
           '<option value="month">This Month</option>' +
+          '<option value="sel-year">Select Year</option>' +
+          '<option value="sel-month">Select Month</option>' +
         '</select>' +
+        '<input type="number" class="filter-select" id="pf-year-val" min="2020" max="2035" placeholder="2026" style="display:none;width:90px;" oninput="_renderPerfData()">' +
+        '<input type="month" class="filter-select" id="pf-month-val" style="display:none;" onchange="_renderPerfData()">' +
         '<select class="filter-select" id="pf-acct" onchange="_renderPerfData()">' +
           '<option value="">All Accounts</option>' +
-          '<option value="my">Malaysia Stocks</option>' +
-          '<option value="us">US Stocks</option>' +
-          '<option value="cr">Crypto</option>' +
-          '<option value="fx">Forex</option>' +
+          ACCOUNTS.map(function(a){ return '<option value="' + a.id + '">' + a.name + '</option>'; }).join('') +
         '</select>' +
       '</div>' +
     '</div>' +
@@ -33,43 +36,77 @@ function renderPerformance() {
     '</table></div></div>' +
   '</div>';
 
+  /* restore saved filter state */
+  var periodEl = document.getElementById('pf-period');
+  var acctEl   = document.getElementById('pf-acct');
+  var yearEl   = document.getElementById('pf-year-val');
+  var monthEl  = document.getElementById('pf-month-val');
+  if (periodEl) periodEl.value = _pf.period;
+  if (acctEl)   acctEl.value   = _pf.acct;
+  if (yearEl  && _pf.yearVal)  yearEl.value  = _pf.yearVal;
+  if (monthEl && _pf.monthVal) monthEl.value = _pf.monthVal;
+
+  _onPerfPeriodChange();
+}
+
+function _onPerfPeriodChange() {
+  var period  = (document.getElementById('pf-period') || {}).value || 'all';
+  var yearEl  = document.getElementById('pf-year-val');
+  var monthEl = document.getElementById('pf-month-val');
+  if (yearEl)  yearEl.style.display  = period === 'sel-year'  ? '' : 'none';
+  if (monthEl) monthEl.style.display = period === 'sel-month' ? '' : 'none';
   _renderPerfData();
 }
 
 function _renderPerfData() {
-  var period = (document.getElementById('pf-period') || {}).value || 'all';
-  var acctId = (document.getElementById('pf-acct')   || {}).value || '';
+  var period   = (document.getElementById('pf-period')    || {}).value || 'all';
+  var acctId   = (document.getElementById('pf-acct')      || {}).value || '';
+  var yearVal  = (document.getElementById('pf-year-val')  || {}).value || '';
+  var monthVal = (document.getElementById('pf-month-val') || {}).value || '';
+
+  _pf.period   = period;
+  _pf.acct     = acctId;
+  _pf.yearVal  = yearVal;
+  _pf.monthVal = monthVal;
 
   var trades = getClosedTrades();
   if (acctId) trades = trades.filter(function(t){ return t.accountId === acctId; });
 
+  var periodLabel = 'all time';
   if (period === 'year') {
     var yr = currentYearStr();
     trades = trades.filter(function(t){ return t.date.startsWith(yr); });
+    periodLabel = 'this year';
   } else if (period === 'month') {
     var mo = currentMonthStr();
     trades = trades.filter(function(t){ return t.date.startsWith(mo); });
+    periodLabel = 'this month';
+  } else if (period === 'sel-year' && yearVal) {
+    trades = trades.filter(function(t){ return t.date.startsWith(yearVal); });
+    periodLabel = yearVal;
+  } else if (period === 'sel-month' && monthVal) {
+    trades = trades.filter(function(t){ return t.date.startsWith(monthVal); });
+    periodLabel = monthVal;
   }
 
   /* stats */
-  var wins  = trades.filter(function(t){ return calcPnL(t) > 0; });
-  var wr    = trades.length ? (wins.length / trades.length * 100).toFixed(1) : '0.0';
-  var ar    = avgR(trades);
-  var dd    = maxDrawdown(trades);
-
-  var acct  = acctId ? getAccount(acctId) : null;
-  var netPnl= trades.reduce(function(s,t){ return s + (calcPnL(t)||0); }, 0);
-  var cur   = acct ? acct.currency : '';
+  var wins   = trades.filter(function(t){ return calcPnL(t) > 0; });
+  var wr     = trades.length ? (wins.length / trades.length * 100).toFixed(1) : '0.0';
+  var ar     = avgR(trades);
+  var dd     = maxDrawdown(trades);
+  var acct   = acctId ? getAccount(acctId) : null;
+  var netPnl = trades.reduce(function(s,t){ return s + (calcPnL(t)||0); }, 0);
+  var cur    = acct ? acct.currency : '';
 
   var statsEl = document.getElementById('perf-stats');
   if (statsEl) statsEl.innerHTML =
     statCard('Win Rate', wr + '%', wins.length + 'W / ' + (trades.length - wins.length) + 'L', 'gold') +
     statCard('Avg R-Multiple', (ar >= 0 ? '+' : '') + ar + 'R', 'expectancy per trade', ar >= 0 ? 'pos' : 'neg') +
-    statCard('Total Trades', trades.length, period === 'all' ? 'all time' : period === 'year' ? 'this year' : 'this month', '') +
+    statCard('Total Trades', trades.length, periodLabel, '') +
     (acct ? statCard('Net P&L', (netPnl >= 0 ? '+' : '') + fmt(netPnl, 0) + ' ' + cur, 'closed trades', netPnl >= 0 ? 'pos' : 'neg') : statCard('Max Drawdown', '-' + fmt(dd, 0), 'peak to trough', 'neg'));
 
   /* by market */
-  var mkts = ['KLCI','Crypto','US Stocks','Forex'];
+  var mkts  = ['KLCI','Crypto','US Stocks','Forex'];
   var mktEl = document.getElementById('perf-mkt');
   if (mktEl) mktEl.innerHTML = mkts.map(function(m) {
     var mt  = trades.filter(function(t){ return t.market === m; });

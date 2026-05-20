@@ -29,7 +29,8 @@ function toDb(t) {
     confluence2: t.confluence2,
     confluence3: t.confluence3,
     mood:        t.mood,
-    review:      t.review
+    review:      t.review,
+    timeframes:  t.timeframes || null
   };
 }
 
@@ -51,7 +52,8 @@ function fromDb(row) {
     confluence2:  row.confluence2 || '',
     confluence3:  row.confluence3 || '',
     mood:         row.mood,
-    review:       row.review
+    review:       row.review,
+    timeframes:   row.timeframes || null
   };
 }
 

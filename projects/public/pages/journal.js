@@ -1,3 +1,5 @@
+var _jf = { market: '', dir: '', result: '' };
+
 function renderJournal() {
   var root = document.getElementById('p-journal');
   root.innerHTML = '<div class="page-content">' +
@@ -6,16 +8,24 @@ function renderJournal() {
       '<button class="btn btn-primary" onclick="openTradeModal(null)">+ Log Trade</button>' +
     '</div>' +
     '<div class="card card-sm mb-16"><div class="filter-bar">' +
-      '<select class="filter-select" id="jf-market" onchange="renderJournal()"><option value="">All Markets</option><option>KLCI</option><option>Crypto</option><option>US Stocks</option><option>Forex</option></select>' +
-      '<select class="filter-select" id="jf-dir" onchange="renderJournal()"><option value="">All Directions</option><option>LONG</option><option>SHORT</option></select>' +
-      '<select class="filter-select" id="jf-result" onchange="renderJournal()"><option value="">All Results</option><option value="win">Wins</option><option value="loss">Losses</option><option value="open">Open</option></select>' +
+      '<select class="filter-select" id="jf-market" onchange="_applyJournalFilters()"><option value="">All Markets</option><option>KLCI</option><option>Crypto</option><option>US Stocks</option><option>Forex</option></select>' +
+      '<select class="filter-select" id="jf-dir" onchange="_applyJournalFilters()"><option value="">All Directions</option><option>LONG</option><option>SHORT</option></select>' +
+      '<select class="filter-select" id="jf-result" onchange="_applyJournalFilters()"><option value="">All Results</option><option value="win">Wins</option><option value="loss">Losses</option><option value="open">Open</option></select>' +
     '</div></div>' +
     '<div class="card"><div class="tbl-wrap"><table>' +
-      '<thead><tr><th>Date</th><th>Asset</th><th>Market</th><th>Dir</th><th>Entry</th><th>SL ⓘ</th><th>TP ⓘ</th><th>Exit</th><th>Units</th><th>P&L</th><th>R</th><th>Mood</th><th>Status</th><th></th></tr></thead>' +
+      '<thead><tr><th>Date</th><th>Asset</th><th>Market</th><th>TF</th><th>Dir</th><th>Entry</th><th>SL ⓘ</th><th>TP ⓘ</th><th>Exit</th><th>Units</th><th>P&L</th><th>R</th><th>Mood</th><th>Status</th><th></th></tr></thead>' +
       '<tbody id="journal-body"></tbody>' +
     '</table></div></div>' +
     journalModal() +
   '</div>';
+
+  /* restore saved filter state */
+  var mktEl = document.getElementById('jf-market');
+  var dirEl = document.getElementById('jf-dir');
+  var resEl = document.getElementById('jf-result');
+  if (mktEl) mktEl.value = _jf.market;
+  if (dirEl) dirEl.value = _jf.dir;
+  if (resEl) resEl.value = _jf.result;
 
   _applyJournalFilters();
 }
@@ -24,6 +34,7 @@ function _applyJournalFilters() {
   var mkt = (document.getElementById('jf-market')  || {}).value || '';
   var dir = (document.getElementById('jf-dir')     || {}).value || '';
   var res = (document.getElementById('jf-result')  || {}).value || '';
+  _jf.market = mkt; _jf.dir = dir; _jf.result = res;
 
   var trades = JOURNAL.slice().reverse();
   if (mkt) trades = trades.filter(function(t){ return t.market === mkt; });
@@ -43,6 +54,7 @@ function _applyJournalFilters() {
       '<td class="text-muted text-sm">' + t.date + '</td>' +
       '<td class="td-asset">' + t.asset + '</td>' +
       '<td>' + marketBadge(t.market) + '</td>' +
+      '<td class="td-mono text-muted" style="font-size:11px;">' + _fmtTfs(t.timeframes) + '</td>' +
       '<td>' + dirBadge(t.dir) + '</td>' +
       '<td class="td-mono">' + fmt(t.entry, 4) + '</td>' +
       '<td class="td-ref">' + fmt(t.sl, 4) + '</td>' +
@@ -55,7 +67,7 @@ function _applyJournalFilters() {
       '<td>' + statusBadge(t) + '</td>' +
       '<td><button class="edit-btn" onclick="openTradeModal(' + t.id + ')" title="Edit">✏</button></td>' +
     '</tr>';
-  }).join('') : '<tr><td colspan="14" class="empty-state">No trades match the filter</td></tr>';
+  }).join('') : '<tr><td colspan="15" class="empty-state">No trades match the filter</td></tr>';
 }
 
 /* ── MODAL HTML ── */
@@ -65,6 +77,16 @@ function journalModal() {
       '<div class="modal-header">' +
         '<div class="modal-title" id="modal-trade-title">Log Trade</div>' +
         '<span class="modal-close" onclick="closeTradeModal()">✕</span>' +
+      '</div>' +
+
+      '<div class="modal-section-label">Timeframes <span class="text-muted" style="font-size:11px;text-transform:none;letter-spacing:0;">(select 2 or more)</span></div>' +
+      '<div class="form-group" style="margin-bottom:0;">' +
+        '<div class="tf-options" id="tf-options">' +
+          ['15min','30min','1H','4H','Daily','Weekly','Monthly'].map(function(tf) {
+            return '<button type="button" class="tf-btn" data-tf="' + tf + '" onclick="_toggleTf(this)">' + tf + '</button>';
+          }).join('') +
+        '</div>' +
+        '<div id="tf-error" style="display:none;font-size:11px;color:var(--red);margin-top:6px;">Select at least 2 timeframes.</div>' +
       '</div>' +
 
       '<div class="modal-section-label">Trade Details</div>' +
@@ -148,6 +170,7 @@ function openTradeModal(id) {
     document.getElementById('m-c3').value           = t.confluence3 || '';
     document.getElementById('m-mood').value         = t.mood || 'Calm';
     document.getElementById('m-review').value       = t.review || '';
+    _setSelectedTfs(t.timeframes || '');
     document.getElementById('modal-delete-btn').style.display = 'inline-flex';
   } else {
     document.getElementById('modal-trade-title').textContent = 'Log Trade';
@@ -166,6 +189,7 @@ function openTradeModal(id) {
     document.getElementById('m-c3').value           = '';
     document.getElementById('m-mood').value         = 'Calm';
     document.getElementById('m-review').value       = '';
+    _setSelectedTfs('');
     document.getElementById('modal-delete-btn').style.display = 'none';
   }
 
@@ -177,6 +201,33 @@ function closeTradeModal() {
   var overlay = document.getElementById('modal-trade');
   if (overlay) overlay.classList.remove('open');
   _editingTradeId = null;
+}
+
+var _TF_ABBR = { '15min':'15m','30min':'30m','1H':'1H','4H':'4H','Daily':'D','Weekly':'W','Monthly':'M' };
+function _fmtTfs(tfsStr) {
+  if (!tfsStr) return '<span class="text-muted">—</span>';
+  return tfsStr.split(',').map(function(t) { return _TF_ABBR[t.trim()] || t; }).join('·');
+}
+
+function _toggleTf(btn) {
+  btn.classList.toggle('tf-active');
+  document.getElementById('tf-error').style.display = 'none';
+}
+
+function _getSelectedTfs() {
+  return Array.from(document.querySelectorAll('#tf-options .tf-active'))
+    .map(function(b) { return b.getAttribute('data-tf'); });
+}
+
+function _setSelectedTfs(tfsStr) {
+  document.querySelectorAll('#tf-options .tf-btn').forEach(function(b) {
+    b.classList.remove('tf-active');
+  });
+  if (!tfsStr) return;
+  tfsStr.split(',').forEach(function(tf) {
+    var btn = document.querySelector('#tf-options [data-tf="' + tf.trim() + '"]');
+    if (btn) btn.classList.add('tf-active');
+  });
 }
 
 var _UNIT_LABELS = {
@@ -221,7 +272,9 @@ function saveTrade() {
   var c2    = document.getElementById('m-c2').value.trim();
   var c3    = document.getElementById('m-c3').value.trim();
 
-  if (!asset)      { _showModalError('Asset name is required.'); return; }
+  var tfs = _getSelectedTfs();
+  if (!asset)         { _showModalError('Asset name is required.'); return; }
+  if (tfs.length < 2) { document.getElementById('tf-error').style.display = 'block'; return; }
   if (!c1 || !c2 || !c3) { _showModalError('All 3 confluences are required before logging a trade.'); return; }
 
   var entry  = parseFloat(document.getElementById('m-entry').value) || null;
@@ -250,6 +303,7 @@ function saveTrade() {
       JOURNAL[idx].confluence3 = c3;
       JOURNAL[idx].mood         = document.getElementById('m-mood').value;
       JOURNAL[idx].review       = document.getElementById('m-review').value || null;
+      JOURNAL[idx].timeframes   = tfs.join(',');
       var cp = parseFloat(document.getElementById('m-currentPrice').value) || null;
       JOURNAL[idx].currentPrice = exit != null ? null : cp;
       if (_apiAvailable) _apiSyncTrade('PATCH', JOURNAL[idx]);
@@ -269,11 +323,12 @@ function saveTrade() {
       exit:         exit,
       units:        units,
       currentPrice: cp2,
-      confluence1: c1,
-      confluence2: c2,
-      confluence3: c3,
-      mood:        document.getElementById('m-mood').value,
-      review:      document.getElementById('m-review').value || null
+      confluence1:  c1,
+      confluence2:  c2,
+      confluence3:  c3,
+      timeframes:   tfs.join(','),
+      mood:         document.getElementById('m-mood').value,
+      review:       document.getElementById('m-review').value || null
     };
     JOURNAL.push(newTrade);
     if (_apiAvailable) _apiSyncTrade('POST', newTrade);

@@ -1,8 +1,15 @@
 window.addEventListener('load', function() {
+  var loader = document.getElementById('app-loader');
+
+  /* safety timeout — always hide loader after 6s regardless of API state */
+  var loaderTimeout = setTimeout(function() {
+    if (loader) loader.style.display = 'none';
+  }, 6000);
+
   _initData().then(function() {
+    clearTimeout(loaderTimeout);
     _renderSidebarFooter();
     nav('p-dashboard');
-    var loader = document.getElementById('app-loader');
     if (loader) loader.style.display = 'none';
   });
 });
