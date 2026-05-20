@@ -252,10 +252,11 @@ function saveTrade() {
       JOURNAL[idx].review       = document.getElementById('m-review').value || null;
       var cp = parseFloat(document.getElementById('m-currentPrice').value) || null;
       JOURNAL[idx].currentPrice = exit != null ? null : cp;
+      if (_apiAvailable) _apiSyncTrade('PATCH', JOURNAL[idx]);
     }
   } else {
     var cp2 = parseFloat(document.getElementById('m-currentPrice').value) || null;
-    JOURNAL.push({
+    var newTrade = {
       id:           nextId(),
       date:         document.getElementById('m-date').value,
       accountId:    acct ? acct.id : 'my',
@@ -273,7 +274,9 @@ function saveTrade() {
       confluence3: c3,
       mood:        document.getElementById('m-mood').value,
       review:      document.getElementById('m-review').value || null
-    });
+    };
+    JOURNAL.push(newTrade);
+    if (_apiAvailable) _apiSyncTrade('POST', newTrade);
   }
 
   closeTradeModal();
@@ -283,10 +286,27 @@ function saveTrade() {
 function deleteTrade() {
   if (!_editingTradeId) return;
   if (!confirm('Delete this trade permanently?')) return;
-  var idx = JOURNAL.findIndex(function(x){ return x.id === _editingTradeId; });
+  var id = _editingTradeId;
+  var idx = JOURNAL.findIndex(function(x){ return x.id === id; });
   if (idx !== -1) JOURNAL.splice(idx, 1);
+  if (_apiAvailable) _apiSyncTrade('DELETE', { id: id });
   closeTradeModal();
   refreshCurrentPage();
+}
+
+function _apiSyncTrade(method, trade) {
+  fetch('/api/journal', {
+    method:  method,
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(trade)
+  }).then(function(r) {
+    if (method === 'POST' && r.ok) {
+      return r.json().then(function(saved) {
+        var t = JOURNAL.find(function(x) { return x === trade; });
+        if (t) t.id = saved.id;
+      });
+    }
+  }).catch(function(e) { console.warn('[API] journal sync failed', e); });
 }
 
 function _showModalError(msg) {

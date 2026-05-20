@@ -165,12 +165,17 @@ function saveAcct() {
   if (_editingAcctId) {
     /* update existing */
     var a = getAccount(_editingAcctId);
-    if (a) { a.name = name; a.currency = currency; a.symbol = symbol; }
+    if (a) {
+      a.name = name; a.currency = currency; a.symbol = symbol;
+      if (_apiAvailable) _apiSyncAccount('PATCH', a);
+    }
   } else {
     /* add new */
     var equity = parseFloat(document.getElementById('acct-equity-init').value) || 0;
     var newId  = 'acct_' + Date.now();
-    ACCOUNTS.push({ id: newId, name: name, currency: currency, symbol: symbol, equity: equity });
+    var newAcct = { id: newId, name: name, currency: currency, symbol: symbol, equity: equity };
+    ACCOUNTS.push(newAcct);
+    if (_apiAvailable) _apiSyncAccount('POST', newAcct);
   }
 
   closeAcctModal();
@@ -227,7 +232,7 @@ function saveTransaction() {
   var lastTx  = TRANSACTIONS.filter(function(t){ return t.accountId === _depositMeta.accountId; });
   var lastBal = lastTx.length ? lastTx[lastTx.length-1].balanceAfter : 0;
 
-  TRANSACTIONS.push({
+  var newTx = {
     id:           TRANSACTIONS.length + 1,
     date:         new Date().toISOString().split('T')[0],
     accountId:    _depositMeta.accountId,
@@ -235,7 +240,15 @@ function saveTransaction() {
     amount:       isWith ? -amount : amount,
     balanceAfter: lastBal + change,
     note:         note
-  });
+  };
+  TRANSACTIONS.push(newTx);
+
+  /* sync account equity and transaction to API */
+  if (_apiAvailable) {
+    var updAcct = getAccount(_depositMeta.accountId);
+    if (updAcct) _apiSyncAccount('PATCH', updAcct);
+    _apiSyncTransaction(newTx);
+  }
 
   closeDepositModal();
   _renderAccountCards();
@@ -250,6 +263,7 @@ function _editEquity(accountId) {
   var num = parseFloat(val);
   if (isNaN(num) || num < 0) { alert('Invalid amount.'); return; }
   acct.equity = num;
+  if (_apiAvailable) _apiSyncAccount('PATCH', acct);
   _renderAccountCards();
 }
 
@@ -258,4 +272,27 @@ function _savePrefs() {
   var l = parseFloat((document.getElementById('pref-limit') || {}).value);
   if (!isNaN(r)) PREFS.defaultRiskPct = r;
   if (!isNaN(l)) PREFS.dailyLimitPct  = l;
+  if (_apiAvailable) {
+    fetch('/api/prefs', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(PREFS)
+    }).catch(function(e) { console.warn('[API] prefs sync failed', e); });
+  }
+}
+
+function _apiSyncAccount(method, acct) {
+  fetch('/api/accounts', {
+    method:  method,
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(acct)
+  }).catch(function(e) { console.warn('[API] account sync failed', e); });
+}
+
+function _apiSyncTransaction(tx) {
+  fetch('/api/transactions', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(tx)
+  }).catch(function(e) { console.warn('[API] transaction sync failed', e); });
 }

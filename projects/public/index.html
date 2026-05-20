@@ -99,6 +99,12 @@
     </div>
   </nav>
 
+  <!-- Loading overlay — hidden after API data loads -->
+  <div id="app-loader" style="position:fixed;inset:0;background:#f0ebe2;display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:12px;">
+    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#1c1108;">J.Tradebook</div>
+    <div style="font-size:13px;color:#7a6550;font-family:Inter,sans-serif;">Loading your data...</div>
+  </div>
+
   <!-- Scripts — load order matters -->
   <script src="js/data.js"></script>
   <script src="js/utils.js"></script>

@@ -1,3 +1,6 @@
+/* ── API STATE ── */
+var _apiAvailable = false;
+
 /* ── ACCOUNTS ── */
 var ACCOUNTS = [
   { id:'my', name:'Malaysia Stocks', currency:'MYR', symbol:'RM',  equity:50000 },
