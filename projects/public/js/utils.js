@@ -43,31 +43,104 @@ function accountBalance(accountId) {
 /* Equity used for position sizing (the live balance of the selected account). */
 function accountEquity(accountId) { return accountBalance(accountId); }
 
-/* ── POSITION SIZING (asset-type specific, per spec §1) ── */
-function computePositionSize(assetType, ticker, entry, sl, riskAmt) {
-  var unit = unitLabel(assetType);
+/* ── ASSET CLASSES ──
+   Account-level asset class drives sizing. Sizes are stored in the natural
+   unit of the class: shares (stocks), units (crypto), lots (forex/CFD).
+   valuePerPoint = $ value of a 1.0 price move for ONE size-unit.
+     MY_STOCK / US_STOCK / CRYPTO -> 1  (size counts the underlying directly)
+     FOREX                        -> per-lot contract value (instrument table) */
+var ASSET_CLASSES = [
+  { key:'MY_STOCK', label:'Malaysia Stock (Bursa)', unit:'Shares', currency:'MYR', lotSize:100 },
+  { key:'US_STOCK', label:'US Stock',                unit:'Shares', currency:'USD', fractional:true },
+  { key:'CRYPTO',   label:'Crypto',                  unit:'Units',  currency:'USDT', fractional:true },
+  { key:'FOREX',    label:'Forex / CFD',             unit:'Lots',   currency:'USD' }
+];
+function assetClassMeta(key) { return ASSET_CLASSES.find(function(a){ return a.key===key; }) || ASSET_CLASSES[1]; }
+
+/* Default instrument contract table (value of a 1.0 price move per 1.0 lot).
+   User-editable in Settings; stored in PREFS.instruments (keyed by symbol). */
+var DEFAULT_INSTRUMENTS = {
+  'XAUUSD': { valuePerPoint:100,    pip:0.1,    label:'Gold' },
+  'XAGUSD': { valuePerPoint:5000,   pip:0.01,   label:'Silver' },
+  'USOIL':  { valuePerPoint:1000,   pip:0.01,   label:'WTI Oil' },
+  'WTI':    { valuePerPoint:1000,   pip:0.01,   label:'WTI Oil' },
+  'US30':   { valuePerPoint:1,      pip:1,      label:'Dow' },
+  'NAS100': { valuePerPoint:1,      pip:1,      label:'Nasdaq' },
+  'SPX500': { valuePerPoint:1,      pip:1,      label:'S&P 500' }
+};
+function instrumentTable() {
+  return Object.assign({}, DEFAULT_INSTRUMENTS, (PREFS && PREFS.instruments) || {});
+}
+
+/* Forex/CFD value-per-point + pip size for a symbol (with FX-major/JPY heuristics). */
+function forexSpec(ticker, entry) {
+  var tk = (ticker || '').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  var tbl = instrumentTable();
+  if (tbl[tk]) return { valuePerPoint: tbl[tk].valuePerPoint, pip: tbl[tk].pip, source:'table' };
+  if (tk.indexOf('XAU') === 0) return { valuePerPoint:100,  pip:0.1,  source:'gold' };
+  if (tk.indexOf('XAG') === 0) return { valuePerPoint:5000, pip:0.01, source:'silver' };
+  // FX pairs
+  var jpy = /JPY$/.test(tk);
+  var pip = jpy ? 0.01 : 0.0001;
+  // $10 per pip per std lot for USD-quoted majors; JPY pairs converted via price
+  var pipValuePerLot = jpy ? (1000 / (entry || 150)) : 10;
+  return { valuePerPoint: pipValuePerLot / pip, pip: pip, source: jpy ? 'fx-jpy' : 'fx-major' };
+}
+
+/* $ value of a 1.0 price move per 1 size-unit for an account's asset class. */
+function valuePerPoint(assetClass, ticker, entry) {
+  if (assetClass === 'FOREX') return forexSpec(ticker, entry).valuePerPoint;
+  return 1;
+}
+
+/* Position size in the class's natural unit. Returns rich detail for the note. */
+function computePositionSize(assetClass, ticker, entry, sl, riskAmt) {
+  var meta = assetClassMeta(assetClass);
   var dist = Math.abs((+entry) - (+sl));
-  if (!dist || !riskAmt || !isFinite(dist)) return { size: 0, unit: unit };
-  var tk = (ticker || '').toUpperCase();
+  var out = { size:0, unit:meta.unit, lots:null, valuePerPoint:1, pip:null, sub:'' };
+  if (!dist || !riskAmt || !isFinite(dist)) return out;
 
-  if (assetType === 'FOREX') {
-    if (tk.indexOf('XAU') >= 0 || tk.indexOf('GOLD') >= 0) {          // XAUUSD
-      return { size: round(riskAmt / (dist * 100), 2), unit: 'Lots (Gold)' };
-    }
-    var pipSize = tk.indexOf('JPY') >= 0 ? 0.01 : 0.0001;            // JPY pairs 2dp
-    var pips = dist / pipSize;
-    var pipValuePerLot = 10;                                          // ~$10/pip per std lot (USD-quoted majors)
-    return { size: round(riskAmt / (pips * pipValuePerLot), 2), unit: 'Std Lots' };
+  if (assetClass === 'MY_STOCK') {
+    var shares = Math.floor(riskAmt / dist);
+    out.size = shares; out.unit = 'Shares';
+    out.lots = round(shares / (meta.lotSize||100), 2);
+    out.valuePerPoint = 1;
+    out.sub = out.lots + ' lots (100 sh)';
+  } else if (assetClass === 'US_STOCK') {
+    out.size = round(riskAmt / dist, 2); out.unit = 'Shares'; out.valuePerPoint = 1;
+    out.sub = 'fractional ok';
+  } else if (assetClass === 'CRYPTO') {
+    out.size = round(riskAmt / dist, 4); out.unit = 'Units'; out.valuePerPoint = 1;
+  } else { // FOREX / CFD
+    var spec = forexSpec(ticker, entry);
+    out.valuePerPoint = spec.valuePerPoint; out.pip = spec.pip;
+    out.size = round(riskAmt / (dist * spec.valuePerPoint), 2);
+    out.unit = 'Lots';
+    out.sub = Math.round(dist / spec.pip) + ' pips';
   }
-  if (assetType === 'STOCK')  return { size: Math.floor(riskAmt / dist), unit: 'Shares' };
-  if (assetType === 'CRYPTO') return { size: round(riskAmt / dist, 4), unit: 'Units' };
-  if (assetType === 'KLCI')   return { size: Math.floor(riskAmt / (dist * 100)), unit: 'Lots' };
-  return { size: Math.floor(riskAmt / dist), unit: 'Units' };
+  return out;
 }
 
-function unitLabel(assetType) {
-  return { FOREX:'Std Lots', STOCK:'Shares', CRYPTO:'Units', KLCI:'Lots' }[assetType] || 'Units';
+/* A concise risk sentence for the calculator. */
+function riskNote(assetClass, ticker, entry, sl, riskAmt, account) {
+  var dist = Math.abs((+entry) - (+sl));
+  if (!dist || !isFinite(dist)) return '';
+  var pctOfEntry = round(dist / Math.abs(entry) * 100, 2);
+  var priceStr;
+  if (assetClass === 'FOREX') {
+    var spec = forexSpec(ticker, entry);
+    priceStr = Math.round(dist / spec.pip) + ' pips (' + pctOfEntry + '% of price)';
+  } else {
+    priceStr = fmtPrice(dist, entry) + ' move (' + pctOfEntry + '% of entry)';
+  }
+  var cur = account ? account.currency : 'USD';
+  var acctPct = account ? round(riskAmt / accountEquity(account.id) * 100, 2) : null;
+  var cashStr = money(riskAmt, cur) + (acctPct != null ? ' = ' + acctPct + '% of ' + account.name.split(' ')[0] : '');
+  return 'Price risk: ' + priceStr + ' · Cash risk: ' + cashStr;
 }
+
+function fmtPrice(v, ref) { return Number(v).toFixed(priceDp(ref || v)); }
+function unitLabel(assetClass) { return assetClassMeta(assetClass).unit; }
 
 /* Target price from entry, SL and R:R multiple. */
 function targetFromRR(entry, sl, rr, direction) {
@@ -84,22 +157,88 @@ function priceDp(v) {
   return 2;
 }
 
-/* ── TRADE PnL / R (asset-type independent via R-multiple) ── */
-function tradeR(t) {
-  if (t.realizedR != null) return t.realizedR;
-  if (t.status !== 'CLOSED' || t.exitPrice == null) return null;
-  var riskDist = Math.abs(t.entryPrice - t.stopLossPrice);
-  if (!riskDist) return null;
-  var dir = t.direction === 'SHORT' ? -1 : 1;
-  return round(dir * (t.exitPrice - t.entryPrice) / riskDist, 2);
+/* ── FILLS MODEL ──
+   A trade holds entries[] (scale-in) and exits[] (scale-out). Legacy trades
+   with only entryPrice/exitPrice are treated as a single fill each. */
+function assetClassOf(t) {
+  var a = getAccount(t.accountId);
+  if (a && a.assetClass) return a.assetClass;
+  return { STOCK:'US_STOCK', FOREX:'FOREX', CRYPTO:'CRYPTO', KLCI:'MY_STOCK' }[t.assetType] || 'US_STOCK';
+}
+function tradeVPP(t, price) {
+  if (t.contractValue != null && t.contractValue > 0) return t.contractValue;   // locked at entry
+  return valuePerPoint(assetClassOf(t), t.ticker, price != null ? price : t.entryPrice);
+}
+function dirSign(t) { return t.direction === 'SHORT' ? -1 : 1; }
+
+function tradeEntries(t) {
+  if (t.entries && t.entries.length) return t.entries;
+  if (t.entryPrice != null) return [{ size: (t.executedSize != null ? t.executedSize : t.positionSize) || 0, price: t.entryPrice }];
+  return [];
+}
+function tradeExits(t) {
+  if (t.exits && t.exits.length) return t.exits;
+  if (t.exitPrice != null) return [{ size: (t.executedSize != null ? t.executedSize : t.positionSize) || 0, price: t.exitPrice }];
+  return [];
+}
+function sumSize(legs) { return legs.reduce(function(s,l){ return s + (+l.size || 0); }, 0); }
+function tradeEntrySize(t) { return sumSize(tradeEntries(t)); }
+function tradeExitSize(t)  { return sumSize(tradeExits(t)); }
+function tradeOpenSize(t)  { return round(tradeEntrySize(t) - tradeExitSize(t), 6); }
+function tradeAvgEntry(t) {
+  var e = tradeEntries(t); var tot = sumSize(e);
+  if (!tot) return t.entryPrice != null ? t.entryPrice : null;
+  return e.reduce(function(s,l){ return s + (+l.size||0)*(+l.price||0); }, 0) / tot;
 }
 
+/* Effective status from fills (used to keep stored status honest). */
+function tradeStatus(t) {
+  if (t.status === 'PLANNING') return 'PLANNING';
+  var open = tradeOpenSize(t), exited = tradeExitSize(t);
+  if (open <= 1e-9) return 'CLOSED';
+  if (exited > 1e-9) return 'PARTIAL';
+  return 'ACTIVE';
+}
+
+/* Realized $ across all exit legs (asset-class correct via valuePerPoint). */
+function tradeRealizedPnL(t) {
+  var exits = tradeExits(t);
+  if (!exits.length) return t.status === 'CLOSED' && t.realizedPnL != null ? t.realizedPnL : null;
+  var avg = tradeAvgEntry(t), dir = dirSign(t);
+  var pnl = exits.reduce(function(s, l){
+    var vpp = tradeVPP(t, l.price);
+    return s + (+l.size||0) * ((+l.price||0) - avg) * dir * vpp;
+  }, 0);
+  return round(pnl, 2);
+}
+/* Planned 1R in $ (the cash risk chosen at entry). */
+function tradePlannedRisk(t) {
+  if (t.riskAmount != null && t.riskAmount > 0) return t.riskAmount;
+  var avg = tradeAvgEntry(t);
+  if (avg == null || t.stopLossPrice == null) return null;
+  return Math.abs(avg - t.stopLossPrice) * tradeEntrySize(t) * tradeVPP(t, avg);
+}
+/* Remaining open $ risk (drops toward 0 when SL is moved to breakeven). */
+function tradeOpenRisk(t) {
+  var open = tradeOpenSize(t);
+  if (open <= 0 || t.stopLossPrice == null) return 0;
+  var avg = tradeAvgEntry(t), dir = dirSign(t);
+  var perUnit = (avg - t.stopLossPrice) * dir;   // >0 = risk below entry; <0 = stop in profit
+  return Math.max(0, round(perUnit * open * tradeVPP(t, avg), 2));
+}
+
+/* Public PnL/R used everywhere. Null while still fully open. */
 function tradePnL(t) {
-  if (t.realizedPnL != null) return t.realizedPnL;
-  if (t.status !== 'CLOSED') return null;
-  var r = tradeR(t);
-  if (r == null || t.riskAmount == null) return null;
-  return round(r * t.riskAmount, 2);
+  var st = tradeStatus(t);
+  if (st === 'PLANNING' || st === 'ACTIVE') return null;
+  var p = tradeRealizedPnL(t);
+  return p == null ? null : p;
+}
+function tradeR(t) {
+  var p = tradePnL(t);
+  var risk = tradePlannedRisk(t);
+  if (p == null || !risk) return null;
+  return round(p / risk, 2);
 }
 
 /* ── VIEW FILTERS (respect global MODE + ACTIVE_ACCOUNT) ── */
@@ -109,9 +248,10 @@ function tradesFor(mode) {
   return TRADES.filter(function(t){ return t.mode === mode && inAccount(t); });
 }
 function viewTrades()       { return tradesFor(MODE); }
-function planningTrades()   { return viewTrades().filter(function(t){ return t.status === 'PLANNING'; }); }
-function activeTrades()     { return viewTrades().filter(function(t){ return t.status === 'ACTIVE'; }); }
-function closedTrades(mode) { return tradesFor(mode || MODE).filter(function(t){ return t.status === 'CLOSED'; }); }
+function planningTrades()   { return viewTrades().filter(function(t){ return tradeStatus(t) === 'PLANNING'; }); }
+/* open positions include partially-closed ones (they still carry risk) */
+function activeTrades()     { return viewTrades().filter(function(t){ var s=tradeStatus(t); return s === 'ACTIVE' || s === 'PARTIAL'; }); }
+function closedTrades(mode) { return tradesFor(mode || MODE).filter(function(t){ return tradeStatus(t) === 'CLOSED'; }); }
 
 function isSameDay(iso, ref) {
   if (!iso) return false;
@@ -120,13 +260,13 @@ function isSameDay(iso, ref) {
 function closedTodayTrades() {
   var today = todayStr();
   return viewTrades().filter(function(t){
-    return t.status === 'CLOSED' && (isSameDay(t.exitTimestamp, today) || isSameDay(t.createdAt, today));
+    return tradeStatus(t) === 'CLOSED' && (isSameDay(t.exitTimestamp, today) || isSameDay(t.createdAt, today));
   });
 }
 
 /* ── KPIs (over a set of CLOSED trades) ── */
 function kpiSet(trades) {
-  var closed = trades.filter(function(t){ return t.status === 'CLOSED'; });
+  var closed = trades.filter(function(t){ return tradeStatus(t) === 'CLOSED'; });
   var n = closed.length;
   var pnls = closed.map(tradePnL).filter(function(v){ return v != null; });
   var net = pnls.reduce(function(a,b){ return a+b; }, 0);
@@ -196,10 +336,11 @@ function gradeMatrix(trades) {
 /* ── PORTFOLIO HEAT (open risk across ACTIVE trades) ── */
 function portfolioHeat() {
   var actives = activeTrades();
-  var risk = actives.reduce(function(s,t){ return s + (t.riskAmount || 0); }, 0);
+  var risk = actives.reduce(function(s,t){ return s + tradeOpenRisk(t); }, 0);
   var equityBase;
   if (ACTIVE_ACCOUNT === 'all') {
-    equityBase = activeAccounts().reduce(function(s,a){ return s + accountBalance(a.id); }, 0);
+    equityBase = activeAccounts().filter(function(a){ return (a.env||'LIVE')===MODE; })
+      .reduce(function(s,a){ return s + accountBalance(a.id); }, 0);
   } else {
     equityBase = accountBalance(ACTIVE_ACCOUNT);
   }
@@ -250,8 +391,9 @@ function pnlClass(v) { return v > 0 ? 'text-pos' : v < 0 ? 'text-neg' : 'text-mu
 /* ── HTML BADGES ── */
 function dirBadge(d) { return '<span class="tdir ' + (d==='LONG'?'dl':'ds') + '">' + d + '</span>'; }
 function statusBadge(s) {
-  var cls = { PLANNING:'sp', ACTIVE:'sa', CLOSED:'sc' }[s] || 'sc';
-  return '<span class="tstat ' + cls + '">' + s + '</span>';
+  var cls = { PLANNING:'sp', ACTIVE:'sa', PARTIAL:'spt', CLOSED:'sc' }[s] || 'sc';
+  var label = s === 'PARTIAL' ? 'PARTIAL' : s;
+  return '<span class="tstat ' + cls + '">' + label + '</span>';
 }
 function gradePill(label, grade) {
   if (!grade) return '<span class="gpill gb">' + label + ' —</span>';
@@ -268,10 +410,20 @@ function todayStr() {
 function nowIso() { return new Date().toISOString(); }
 function shortDate(iso) { return iso ? String(iso).slice(0,10) : '—'; }
 
-/* ── constants shared by pages ── */
-var ENTRY_REASONS = ['4H Structure Confirmed','1H Consolidation Breakout','SMA26 > SMA69','Price > SMA69',
+/* ── constants shared by pages ──
+   Reason/mistake lists have editable defaults; user overrides live in PREFS
+   (set in Settings) so they can add/refine/delete their own tags. */
+var DEFAULT_ENTRY_REASONS = ['4H Structure Confirmed','1H Consolidation Breakout','SMA26 > SMA69','Price > SMA69',
   'Low Not Breaking Low','High Breaking High','Volume Expansion','R:R >= 1:3','Clean Setup','Second Push','MTF Alignment'];
-var MISTAKE_TAGS = ['Clean Execution','Squeezed Target','Chased Entry','Moved SL Early','Exited Too Early','Overleveraged','Revenge Trade'];
+var DEFAULT_MISTAKE_TAGS = ['Clean Execution','Squeezed Target','Chased Entry','Moved SL Early','Exited Too Early','Overleveraged','Revenge Trade'];
+
+function entryReasons() { return (PREFS && PREFS.entryReasons && PREFS.entryReasons.length) ? PREFS.entryReasons : DEFAULT_ENTRY_REASONS; }
+function exitReasons()  { return (PREFS && PREFS.exitReasons && PREFS.exitReasons.length) ? PREFS.exitReasons : DEFAULT_MISTAKE_TAGS; }
+
+/* back-compat aliases used by older page code */
+var ENTRY_REASONS = DEFAULT_ENTRY_REASONS;
+var MISTAKE_TAGS = DEFAULT_MISTAKE_TAGS;
+
 var MOODS = [
   { key:'CALIBRATED', label:'😌 Calibrated' },
   { key:'IMPATIENT',  label:'😤 Impatient' },

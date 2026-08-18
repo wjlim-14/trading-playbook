@@ -1,14 +1,5 @@
 import { supabase } from './_supabase.js';
 
-/*
-  Cash Flow Transactions API (V2) — table: account_transactions.
-  Types: DEPOSIT | WITHDRAWAL | PROP_PAYOUT | FEE_ADJUSTMENT.
-  Balance is COMPUTED on the client (never stored per-row) so cash flow
-  stays strictly isolated from trading statistics.
-
-  GET ?accountId=<uuid> to filter by account.
-*/
-
 function readBody(req) {
   return new Promise(function(resolve, reject) {
     var data = '';
@@ -21,32 +12,15 @@ function readBody(req) {
   });
 }
 
-function toDb(t) {
-  var map = {
-    accountId: 'account_id',
-    type:      'type',
-    amount:    'amount',
-    fee:       'fee',
-    date:      'date',
-    notes:     'notes'
-  };
-  var row = {};
-  Object.keys(map).forEach(function(k) {
-    if (t[k] !== undefined) row[map[k]] = t[k];
-  });
-  return row;
-}
-
 function fromDb(row) {
   return {
-    id:        row.id,
-    accountId: row.account_id,
-    type:      row.type,
-    amount:    Number(row.amount),
-    fee:       row.fee != null ? Number(row.fee) : 0,
-    date:      row.date,
-    notes:     row.notes || '',
-    createdAt: row.created_at || null
+    id:           row.id,
+    date:         row.date,
+    accountId:    row.account_id,
+    type:         row.type,
+    amount:       Number(row.amount),
+    balanceAfter: Number(row.balance_after),
+    note:         row.note
   };
 }
 
@@ -54,12 +28,9 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
 
   if (req.method === 'GET') {
-    var q = supabase.from('account_transactions').select('*');
-    var url = new URL(req.url, 'http://x');
-    var accountId = url.searchParams.get('accountId');
-    if (accountId) q = q.eq('account_id', accountId);
-    var { data, error } = await q
-      .order('date', { ascending: true })
+    var { data, error } = await supabase
+      .from('transactions')
+      .select('*')
       .order('id', { ascending: true });
     if (error) return res.status(500).json({ error: error.message });
     return res.json(data.map(fromDb));
@@ -67,25 +38,17 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     var body = await readBody(req);
-    var { data, error } = await supabase.from('account_transactions').insert(toDb(body)).select().single();
+    var row = {
+      date:         body.date,
+      account_id:   body.accountId,
+      type:         body.type,
+      amount:       body.amount,
+      balance_after: body.balanceAfter,
+      note:         body.note
+    };
+    var { data, error } = await supabase.from('transactions').insert(row).select().single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(201).json(fromDb(data));
-  }
-
-  if (req.method === 'PATCH') {
-    var body = await readBody(req);
-    var id = body.id;
-    if (!id) return res.status(400).json({ error: 'Missing id' });
-    var { data, error } = await supabase.from('account_transactions').update(toDb(body)).eq('id', id).select().single();
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json(fromDb(data));
-  }
-
-  if (req.method === 'DELETE') {
-    var body = await readBody(req);
-    var { error } = await supabase.from('account_transactions').delete().eq('id', body.id);
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(204).end();
   }
 
   res.status(405).end();

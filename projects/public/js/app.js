@@ -36,12 +36,16 @@ function _renderDemoBadge() {
 /* ── MODE (LIVE / BACKTEST) ── */
 function setMode(m) {
   MODE = m;
+  ACTIVE_ACCOUNT = 'all';          // account sets differ between LIVE and BACKTEST
+  CALC = null;                     // reset calculator to a valid account
   _syncModeUI();
   apiSavePrefs({ mode: m });
+  _renderAccountSwitcher();
   _renderSidebarHeat();
   _renderNavBadges();
   refreshCurrentPage();
 }
+function envAccountsLive() { return ACCOUNTS.filter(function(a){ return !a.isArchived && (a.env||'LIVE')===MODE; }); }
 function _syncModeUI() {
   var live = document.getElementById('btn-live');
   var bt = document.getElementById('btn-backtest');
@@ -56,7 +60,7 @@ function _renderAccountSwitcher() {
   var sel = document.getElementById('acct-switch');
   if (!sel) return;
   var opts = '<option value="all">All Consolidated</option>';
-  activeAccounts().forEach(function(a){
+  envAccountsLive().forEach(function(a){
     opts += '<option value="' + a.id + '"' + (a.id === ACTIVE_ACCOUNT ? ' selected' : '') + '>' +
       escapeHtml(a.name) + '</option>';
   });
@@ -68,7 +72,7 @@ function _renderSwitcherBalance() {
   var el = document.getElementById('acct-switch-bal');
   if (!el) return;
   if (ACTIVE_ACCOUNT === 'all') {
-    var total = activeAccounts().reduce(function(s,a){ return s + accountBalance(a.id); }, 0);
+    var total = envAccountsLive().reduce(function(s,a){ return s + accountBalance(a.id); }, 0);
     el.textContent = money(total, 'USD') + ' total';
   } else {
     var a = getAccount(ACTIVE_ACCOUNT);

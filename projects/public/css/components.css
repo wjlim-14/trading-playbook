@@ -54,6 +54,7 @@
 .sp{background:rgba(154,124,58,.1);color:var(--gold);border:1px solid rgba(154,124,58,.25);}
 .sa{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(37,88,160,.25);}
 .sc{background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+.spt{background:rgba(196,122,32,.1);color:var(--amber);border:1px solid rgba(196,122,32,.3);}
 .tinfo{flex:1;display:flex;gap:14px;flex-wrap:wrap;min-width:0;}
 .tf{display:flex;flex-direction:column;}
 .tfl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;}

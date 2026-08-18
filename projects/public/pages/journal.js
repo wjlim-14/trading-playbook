@@ -32,7 +32,7 @@ function renderJournal() {
     return '<button class="tab' + (JFILTER.grade===g[0]?' active':'') + '" onclick="jSetGrade(\'' + g[0] + '\')">' + g[1] + '</button>';
   }).join('');
 
-  var mistakeOpts = '<option value="">All mistakes</option>' + MISTAKE_TAGS.map(function(m){
+  var mistakeOpts = '<option value="">All mistakes</option>' + exitReasons().map(function(m){
     return '<option value="' + escapeHtml(m) + '"' + (JFILTER.mistake===m?' selected':'') + '>' + escapeHtml(m) + '</option>';
   }).join('');
 
@@ -95,7 +95,7 @@ function journalRow(t) {
     '<div class="trow" onclick="jToggle(\'' + t.id + '\')">' +
       '<div class="tsym">' + escapeHtml(t.ticker) + '</div>' + dirBadge(t.direction) + statusBadge('CLOSED') +
       '<div class="tinfo">' +
-        '<div class="tf"><div class="tfl">Entry→Exit</div><div class="tfv">' + t.entryPrice + '→' + t.exitPrice + '</div></div>' +
+        '<div class="tf"><div class="tfl">Avg→Exit</div><div class="tfv">' + fmtN(tradeAvgEntry(t)) + '→' + fmtN(lastExitPrice(t)) + '</div></div>' +
         '<div class="tf"><div class="tfl">R</div><div class="tfv ' + pnlClass(tradeR(t)) + '">' + rStr(tradeR(t)) + '</div></div>' +
       '</div>' + gradeArea +
       '<div class="tpnl ' + pnlClass(pnl) + '">' + moneySigned(pnl,cur) + '</div>' +
@@ -111,7 +111,7 @@ function journalDetail(t) {
       '<div class="gl">' + g[0] + '</div><div class="gd">' + g[1] + '</div></button>';
   }).join('');
 
-  var mtags = MISTAKE_TAGS.map(function(m){
+  var mtags = exitReasons().map(function(m){
     var sel = (t.mistakeTags||[]).indexOf(m) >= 0;
     var bad = m !== 'Clean Execution';
     return '<span class="ptag' + (bad?' bad':'') + (sel?' sel':'') + '" onclick="toggleMistake(\'' + t.id + '\',\'' + escapeHtml(m).replace(/'/g,"\\'") + '\')">' + escapeHtml(m) + '</span>';

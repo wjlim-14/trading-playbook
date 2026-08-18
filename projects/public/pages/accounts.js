@@ -7,25 +7,33 @@
 var ACCOUNT_TYPES = [['PERSONAL_SPOT','Personal Spot'],['MARGIN','Margin'],['PROP_FIRM','Prop Firm']];
 var TX_TYPES = [['DEPOSIT','Deposit'],['WITHDRAWAL','Withdrawal'],['PROP_PAYOUT','Prop Payout'],['FEE_ADJUSTMENT','Fee Adjustment']];
 
+/* accounts scoped to the current environment (LIVE vs BACKTEST) */
+function envAccounts() { return ACCOUNTS.filter(function(a){ return (a.env || 'LIVE') === MODE; }); }
+
 function renderAccounts() {
   var el = document.getElementById('p-accounts');
+  var isBacktest = MODE === 'BACKTEST';
 
-  var cards = ACCOUNTS.slice().sort(function(a,b){ return (a.isArchived?1:0)-(b.isArchived?1:0); })
+  var cards = envAccounts().slice().sort(function(a,b){ return (a.isArchived?1:0)-(b.isArchived?1:0); })
     .map(accountCard).join('');
 
-  var txRows = TRANSACTIONS.slice().sort(function(a,b){ return (a.date<b.date?1:-1); })
-    .slice(0,40).map(txRow).join('');
+  var addCard = isBacktest ? ''
+    : '<div class="acard-add" onclick="openAccountModal()"><div style="font-size:22px;color:var(--muted)">+</div>' +
+      '<div style="font-size:12px;color:var(--muted);font-weight:600">Add Account</div></div>';
+
+  var txRows = TRANSACTIONS.filter(function(t){ var a=getAccount(t.accountId); return a && (a.env||'LIVE')===MODE; })
+    .sort(function(a,b){ return (a.date<b.date?1:-1); }).slice(0,40).map(txRow).join('');
 
   el.innerHTML =
-    '<div class="agrid">' + cards +
-      '<div class="acard-add" onclick="openAccountModal()"><div style="font-size:22px;color:var(--muted)">+</div>' +
-      '<div style="font-size:12px;color:var(--muted);font-weight:600">Add Account</div></div></div>' +
+    (isBacktest ? '<div class="mock-banner"><span style="font-size:15px">🧪</span><div><strong>Backtest accounts</strong> — 4 fixed simulation accounts, one per market. Not editable/deletable.</div></div>' : '') +
+    '<div class="agrid">' + cards + addCard + '</div>' +
+    (isBacktest ? '' :
     '<div class="card"><div class="card-h"><div class="card-t">Cash Flow Transactions</div>' +
       '<button class="btn btn-gold btn-sm" onclick="openTxModal()">+ Transaction</button></div>' +
       '<div class="card-b"><div style="display:flex;flex-direction:column;gap:6px">' +
         (txRows || '<div class="empty">No transactions yet.</div>') + '</div>' +
         '<div class="isolation-note">⚠️ Cash transactions update balance only — <strong style="color:var(--gold)">strictly excluded</strong> from Win Rate, PnL & the trading equity curve.</div>' +
-      '</div></div>';
+      '</div></div>');
 }
 
 function accountCard(a) {
@@ -35,10 +43,21 @@ function accountCard(a) {
   var withdrawals = TRANSACTIONS.filter(function(t){return t.accountId===a.id && t.type==='WITHDRAWAL';}).reduce(function(s,t){return s+t.amount;},0);
   var fees = TRANSACTIONS.filter(function(t){return t.accountId===a.id;}).reduce(function(s,t){return s+(t.fee||0)+(t.type==='FEE_ADJUSTMENT'?t.amount:0);},0);
 
+  var isBacktest = (a.env || 'LIVE') === 'BACKTEST';
+  var acls = assetClassMeta(a.assetClass);
+
+  var actions = isBacktest
+    ? '<button class="btn btn-ghost btn-sm" onclick="openAccountModal(\'' + a.id + '\')">Edit balance</button>'
+    : '<button class="btn btn-green btn-sm" onclick="openTxModal(\'' + a.id + '\',\'DEPOSIT\')">+ Deposit</button>' +
+      '<button class="btn btn-red btn-sm" onclick="openTxModal(\'' + a.id + '\',\'WITHDRAWAL\')">- Withdraw</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openAccountModal(\'' + a.id + '\')">Edit</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="toggleArchive(\'' + a.id + '\')">' + (a.isArchived?'Unarchive':'Archive') + '</button>' +
+      '<button class="btn btn-red btn-sm" style="margin-left:auto" onclick="deleteAccount(\'' + a.id + '\')">Delete</button>';
+
   return '<div class="acard' + (a.isArchived?' archived':'') + '">' +
     '<div style="display:flex;justify-content:space-between;gap:8px">' +
       '<div><div class="acard-name">' + escapeHtml(a.name) + '</div>' +
-        '<div class="acard-meta">' + prettyType(a.accountType) + ' · ' + escapeHtml(a.currency) + (a.broker?' · '+escapeHtml(a.broker):'') + '</div></div>' +
+        '<div class="acard-meta"><span style="color:var(--gold);font-weight:600">' + acls.label + '</span> · ' + escapeHtml(a.currency) + (a.broker?' · '+escapeHtml(a.broker):'') + '</div></div>' +
       '<div style="width:8px;height:8px;border-radius:50%;background:' + (a.isArchived?'var(--muted)':'var(--green)') + ';margin-top:4px"></div>' +
     '</div>' +
     '<div class="acard-bal">' + money(bal, a.currency, 2) + '</div>' +
@@ -47,15 +66,29 @@ function accountCard(a) {
       'Deposits: ' + moneySigned(deposits,a.currency) + ' · Withdrawals: ' + moneySigned(-withdrawals,a.currency) +
       (fees?' · Fees: ' + moneySigned(-fees,a.currency):'') + '</div>' +
     '<div class="divider" style="margin:8px 0"></div>' +
-    '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-      '<button class="btn btn-green btn-sm" onclick="openTxModal(\'' + a.id + '\',\'DEPOSIT\')">+ Deposit</button>' +
-      '<button class="btn btn-red btn-sm" onclick="openTxModal(\'' + a.id + '\',\'WITHDRAWAL\')">- Withdraw</button>' +
-      '<button class="btn btn-ghost btn-sm" onclick="openAccountModal(\'' + a.id + '\')">Edit</button>' +
-      '<button class="btn btn-ghost btn-sm" onclick="toggleArchive(\'' + a.id + '\')">' + (a.isArchived?'Unarchive':'Archive') + '</button>' +
-    '</div></div>';
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' + actions + '</div></div>';
 }
 
 function prettyType(t){ var m={PERSONAL_SPOT:'Personal Spot',MARGIN:'Margin',PROP_FIRM:'Prop Firm'}; return m[t]||t; }
+
+function deleteAccount(id) {
+  var a = getAccount(id); if (!a) return;
+  var nTrades = TRADES.filter(function(t){ return t.accountId===id; }).length;
+  openModal({
+    title: 'Delete account?',
+    body: '<p style="font-size:13px;color:var(--text2)">Delete <strong>' + escapeHtml(a.name) + '</strong>?' +
+      (nTrades ? ' It has <strong>' + nTrades + '</strong> trade(s) — they will be kept but unlinked from this account.' : ' This cannot be undone.') + '</p>',
+    footer: '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>' +
+            '<button class="btn btn-red" onclick="confirmDeleteAccount(\'' + id + '\')">Delete account</button>'
+  });
+}
+function confirmDeleteAccount(id) {
+  apiDeleteAccount(id).then(function(){
+    closeModal(); toast('Account deleted','ok');
+    if (ACTIVE_ACCOUNT === id) setActiveAccount('all');
+    _afterMutation(); renderAccounts();
+  }).catch(function(e){ toast('Failed: '+e.message,'err'); });
+}
 
 function txRow(t) {
   var a = getAccount(t.accountId);
@@ -77,26 +110,38 @@ function txRow(t) {
 function openAccountModal(id) {
   var a = id ? getAccount(id) : null;
   var typeOpts = ACCOUNT_TYPES.map(function(t){ return '<option value="'+t[0]+'"'+(a&&a.accountType===t[0]?' selected':'')+'>'+t[1]+'</option>'; }).join('');
+  var classOpts = ASSET_CLASSES.map(function(c){ return '<option value="'+c.key+'" data-cur="'+c.currency+'"'+(a&&a.assetClass===c.key?' selected':'')+'>'+c.label+'</option>'; }).join('');
   openModal({
     title: a ? 'Edit Account' : 'New Account',
     body:
       '<div class="field"><div class="fl">Name</div><input class="fi" id="a-name" value="' + (a?escapeHtml(a.name):'') + '" placeholder="Main"></div>' +
-      '<div class="field"><div class="fl">Broker / Exchange</div><input class="fi" id="a-broker" value="' + (a?escapeHtml(a.broker):'') + '" placeholder="Moomoo SG"></div>' +
-      '<div class="cg2"><div class="field"><div class="fl">Type</div><select class="fi" id="a-type">' + typeOpts + '</select></div>' +
-      '<div class="field"><div class="fl">Currency</div><input class="fi" id="a-cur" value="' + (a?escapeHtml(a.currency):'USD') + '" placeholder="USD"></div></div>' +
-      '<div class="field"><div class="fl">Starting Balance</div><input class="fi" id="a-init" value="' + (a?a.initialBalance:'') + '" placeholder="10000"' + (a?' ':'') + '></div>',
+      '<div class="field"><div class="fl">Asset Class (drives the calculator)</div>' +
+        '<select class="fi" id="a-class" onchange="_syncAcctCurrency()">' + classOpts + '</select></div>' +
+      '<div class="cg2"><div class="field"><div class="fl">Currency</div><input class="fi" id="a-cur" value="' + (a?escapeHtml(a.currency):'USD') + '" placeholder="USD"></div>' +
+      '<div class="field"><div class="fl">Account Type</div><select class="fi" id="a-type">' + typeOpts + '</select></div></div>' +
+      '<div class="field"><div class="fl">Broker / Exchange</div><input class="fi" id="a-broker" value="' + (a?escapeHtml(a.broker):'') + '" placeholder="Moomoo, Binance…"></div>' +
+      '<div class="field"><div class="fl">Starting Balance</div><input class="fi" id="a-init" value="' + (a!=null?a.initialBalance:'') + '" placeholder="10000"></div>',
     footer: '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>' +
-            '<button class="btn btn-gold" onclick="saveAccount(' + (a?'\''+a.id+'\'':'null') + ')">Save</button>'
+            '<button class="btn btn-gold" onclick="saveAccount(' + (a?'\''+a.id+'\'':'null') + ')">Save</button>',
+    onMount: function(){ if (!a) _syncAcctCurrency(); }
   });
+}
+function _syncAcctCurrency() {
+  var sel = document.getElementById('a-class');
+  var cur = document.getElementById('a-cur');
+  if (sel && cur) { var o = sel.options[sel.selectedIndex]; if (o && o.getAttribute('data-cur')) cur.value = o.getAttribute('data-cur'); }
 }
 function saveAccount(id) {
   var name = document.getElementById('a-name').value.trim();
   if (!name) { toast('Name required','err'); return; }
   var init = parseFloat(document.getElementById('a-init').value) || 0;
+  var existing = id ? getAccount(id) : null;
   var payload = {
     name: name,
     broker: document.getElementById('a-broker').value.trim(),
     accountType: document.getElementById('a-type').value,
+    assetClass: document.getElementById('a-class').value,
+    env: existing ? (existing.env || 'LIVE') : MODE,
     currency: document.getElementById('a-cur').value.trim().toUpperCase() || 'USD',
     initialBalance: init
   };

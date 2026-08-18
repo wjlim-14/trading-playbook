@@ -27,6 +27,12 @@ function renderDashboard() {
 
   var series = equitySeries(trades);
   var mx = gradeMatrix(trades);
+  var curCur = (ACTIVE_ACCOUNT !== 'all' && getAccount(ACTIVE_ACCOUNT)) ? getAccount(ACTIVE_ACCOUNT).currency : 'USD';
+  var deposits = TRANSACTIONS.filter(function(x){
+    var a = getAccount(x.accountId);
+    return a && (a.env||'LIVE')===MODE && inAccount({accountId:x.accountId, mode:MODE}) &&
+      (x.type==='DEPOSIT'||x.type==='PROP_PAYOUT'||x.type==='WITHDRAWAL');
+  }).map(function(x){ return { date: shortDate(x.date), amount: x.amount }; });
 
   var recent = trades.slice().sort(function(a,b){
     var ka=(a.exitTimestamp||a.entryTimestamp||a.createdAt||''), kb=(b.exitTimestamp||b.entryTimestamp||b.createdAt||'');
@@ -40,7 +46,7 @@ function renderDashboard() {
     '<div class="g32">' +
       '<div class="card"><div class="card-h"><div class="card-t">Trading Equity Curve</div>' +
         '<div style="font-size:10px;color:var(--muted)">Trading PnL only</div></div>' +
-        '<div class="card-b">' + equityCurveSVG(series, {id:'dash'}) +
+        '<div class="card-b">' + equityCurveSVG(series, {id:'dash', currency:curCur, deposits:deposits}) +
           '<div class="eq-legend">' +
             '<div><div style="width:14px;height:2px;background:' + (k.net>=0?'var(--green)':'var(--red)') + '"></div>Cumulative trading PnL</div>' +
             '<div><div style="width:14px;height:1px;border-top:1px dashed var(--gold)"></div>Cash events excluded</div>' +

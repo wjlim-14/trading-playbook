@@ -56,16 +56,22 @@ function _demoDisabled() {
 function loadMockData() {
   DEMO_MODE = true;
   ACCOUNTS = [
-    { id:'a1', name:'Main — Moomoo SG', broker:'Moomoo', accountType:'PERSONAL_SPOT', currency:'USD',  initialBalance:10000, currentBalance:12686, isArchived:false, createdAt:'2026-05-01T00:00:00Z' },
-    { id:'a2', name:'Prop — FTMO 100K',  broker:'FTMO',   accountType:'PROP_FIRM',     currency:'USD',  initialBalance:100000, currentBalance:104200, isArchived:false, createdAt:'2026-05-03T00:00:00Z' },
-    { id:'a3', name:'Crypto — Binance',  broker:'Binance', accountType:'MARGIN',        currency:'USDT', initialBalance:5000,  currentBalance:5920,  isArchived:false, createdAt:'2026-05-05T00:00:00Z' }
+    { id:'a1', name:'US — Moomoo',   broker:'Moomoo',  accountType:'PERSONAL_SPOT', assetClass:'US_STOCK', env:'LIVE', currency:'USD',  initialBalance:10000, currentBalance:12686, isArchived:false, createdAt:'2026-05-01T00:00:00Z' },
+    { id:'a2', name:'Malaysia — RHB', broker:'RHB',    accountType:'PERSONAL_SPOT', assetClass:'MY_STOCK', env:'LIVE', currency:'MYR',  initialBalance:50000, currentBalance:53200, isArchived:false, createdAt:'2026-05-02T00:00:00Z' },
+    { id:'a3', name:'Forex — FTMO',   broker:'FTMO',   accountType:'PROP_FIRM',     assetClass:'FOREX',    env:'LIVE', currency:'USD',  initialBalance:100000, currentBalance:104200, isArchived:false, createdAt:'2026-05-03T00:00:00Z' },
+    { id:'a4', name:'Crypto — Binance', broker:'Binance', accountType:'MARGIN',     assetClass:'CRYPTO',   env:'LIVE', currency:'USDT', initialBalance:5000,  currentBalance:5920,  isArchived:false, createdAt:'2026-05-05T00:00:00Z' },
+    // fixed backtest accounts
+    { id:'bt-my', name:'Backtest — Malaysia Stock', broker:'Bursa', accountType:'PERSONAL_SPOT', assetClass:'MY_STOCK', env:'BACKTEST', currency:'MYR',  initialBalance:100000, currentBalance:100000, isArchived:false, createdAt:'2026-05-01T00:00:00Z' },
+    { id:'bt-us', name:'Backtest — US Stock',       broker:'',      accountType:'PERSONAL_SPOT', assetClass:'US_STOCK', env:'BACKTEST', currency:'USD',  initialBalance:100000, currentBalance:100000, isArchived:false, createdAt:'2026-05-01T00:00:00Z' },
+    { id:'bt-fx', name:'Backtest — Forex',          broker:'',      accountType:'MARGIN',        assetClass:'FOREX',    env:'BACKTEST', currency:'USD',  initialBalance:100000, currentBalance:100000, isArchived:false, createdAt:'2026-05-01T00:00:00Z' },
+    { id:'bt-cr', name:'Backtest — Crypto',         broker:'',      accountType:'MARGIN',        assetClass:'CRYPTO',   env:'BACKTEST', currency:'USDT', initialBalance:100000, currentBalance:100000, isArchived:false, createdAt:'2026-05-01T00:00:00Z' }
   ];
   TRANSACTIONS = [
     { id:'x1', accountId:'a1', type:'DEPOSIT',     amount:10000, fee:0,  date:'2026-05-01', notes:'Initial capital', createdAt:'2026-05-01' },
     { id:'x2', accountId:'a1', type:'DEPOSIT',     amount:3000,  fee:0,  date:'2026-06-01', notes:'Top up',          createdAt:'2026-06-01' },
     { id:'x3', accountId:'a1', type:'WITHDRAWAL',  amount:500,   fee:2,  date:'2026-07-15', notes:'Profit take',     createdAt:'2026-07-15' },
-    { id:'x4', accountId:'a2', type:'PROP_PAYOUT', amount:4000,  fee:0,  date:'2026-07-20', notes:'Payout cycle 1',  createdAt:'2026-07-20' },
-    { id:'x5', accountId:'a3', type:'DEPOSIT',     amount:5000,  fee:0,  date:'2026-05-05', notes:'Seed',            createdAt:'2026-05-05' }
+    { id:'x4', accountId:'a3', type:'PROP_PAYOUT', amount:4000,  fee:0,  date:'2026-07-20', notes:'Payout cycle 1',  createdAt:'2026-07-20' },
+    { id:'x5', accountId:'a4', type:'DEPOSIT',     amount:5000,  fee:0,  date:'2026-05-05', notes:'Seed',            createdAt:'2026-05-05' }
   ];
   TRADES = _mockTrades();
   PREFS = { defaultRiskPct:2, dailyLimitPct:6, mode:'LIVE', activeAccountId:null };
@@ -81,6 +87,64 @@ function _mk(o) {
 }
 
 function _mockTrades() {
+  return _mockTradesV3();
+}
+function _mockTradesV3() {
+  return [
+    // US stock — closed, clean A/A
+    _mk({ id:'t1', accountId:'a1', ticker:'NVDA', direction:'LONG', assetType:'STOCK', status:'CLOSED',
+      entryPrice:118.4, stopLossPrice:112, targetPrice:138, positionSize:19, executedSize:19, riskAmount:122, riskPct:1, plannedRR:3,
+      entryGrade:'A', preTradeMood:'CALIBRATED', entryReasonTags:['4H Structure Confirmed','Volume Expansion'],
+      entries:[{size:19,price:118.4,time:'2026-08-11T08:00:00Z'}], exits:[{size:19,price:138,time:'2026-08-12T15:00:00Z'}],
+      realizedPnL:372, realizedR:3.05, exitGrade:'A', mistakeTags:['Clean Execution'], reflectionNote:'Held the runner, textbook.',
+      reviewComplete:true, exitTimestamp:'2026-08-12T15:00:00Z', createdAt:'2026-08-11T08:00:00Z' }),
+    // Malaysia stock — closed (shares / lots)
+    _mk({ id:'t2', accountId:'a2', ticker:'MAYBANK', direction:'LONG', assetType:'KLCI', status:'CLOSED',
+      entryPrice:9.20, stopLossPrice:8.90, targetPrice:10.10, positionSize:1000, executedSize:1000, riskAmount:300, riskPct:0.6, plannedRR:3,
+      entryGrade:'B', preTradeMood:'CALIBRATED', entryReasonTags:['SMA26 > SMA69'],
+      entries:[{size:1000,price:9.20}], exits:[{size:1000,price:9.68}],
+      realizedPnL:480, realizedR:1.6, exitGrade:'B', mistakeTags:['Squeezed Target'], reflectionNote:'Exited a touch early.',
+      reviewComplete:true, exitTimestamp:'2026-08-13T09:00:00Z', createdAt:'2026-08-12T02:00:00Z' }),
+    // Forex gold — closed (lots, contract value locked)
+    _mk({ id:'t3', accountId:'a3', ticker:'XAUUSD', direction:'LONG', assetType:'FOREX', status:'CLOSED',
+      entryPrice:2318.5, stopLossPrice:2305, targetPrice:2358.5, positionSize:0.09, executedSize:0.09, contractValue:100, riskAmount:121.5, riskPct:0.12, plannedRR:3,
+      entryGrade:'A', preTradeMood:'CALIBRATED', entryReasonTags:['4H Structure Confirmed','R:R >= 1:3'],
+      entries:[{size:0.09,price:2318.5}], exits:[{size:0.09,price:2350}],
+      realizedPnL:283, realizedR:2.33, exitGrade:'A', mistakeTags:['Clean Execution'], reflectionNote:'Patience on the 1H trigger.',
+      reviewComplete:true, exitTimestamp:'2026-08-14T13:00:00Z', createdAt:'2026-08-13T07:00:00Z' }),
+    // Crypto — PARTIAL: sold half, SL moved to breakeven, runner open
+    _mk({ id:'t4', accountId:'a4', ticker:'BTCUSDT', direction:'LONG', assetType:'CRYPTO', status:'PARTIAL',
+      entryPrice:61200, stopLossPrice:61200, targetPrice:66300, positionSize:0.058, executedSize:0.058, riskAmount:98.6, riskPct:1.9, plannedRR:3,
+      entryGrade:'A', preTradeMood:'CALIBRATED', entryReasonTags:['1H Consolidation Breakout','High Breaking High'], setupNotes:'Secured initial capital at +2R, runner to the moon.',
+      entries:[{size:0.058,price:61200,time:'2026-08-16T18:00:00Z'}],
+      exits:[{size:0.029,price:65100,time:'2026-08-17T10:00:00Z',note:'secured initial capital'}],
+      exitTimestamp:'2026-08-17T10:00:00Z', createdAt:'2026-08-16T18:00:00Z' }),
+    // US stock — active
+    _mk({ id:'t5', accountId:'a1', ticker:'AAPL', direction:'LONG', assetType:'STOCK', status:'ACTIVE',
+      entryPrice:228.5, stopLossPrice:222, targetPrice:248, positionSize:18, executedSize:18, riskAmount:117, riskPct:0.9, plannedRR:3,
+      entryGrade:'A', preTradeMood:'CALIBRATED', entryReasonTags:['4H Structure Confirmed','Price > SMA69'],
+      entries:[{size:18,price:228.5}], setupNotes:'Breakout retest holding.', createdAt:'2026-08-18T08:00:00Z' }),
+    // Forex — active
+    _mk({ id:'t6', accountId:'a3', ticker:'EURUSD', direction:'LONG', assetType:'FOREX', status:'ACTIVE',
+      entryPrice:1.0740, stopLossPrice:1.0700, targetPrice:1.0860, positionSize:0.5, executedSize:0.5, contractValue:100000, riskAmount:200, riskPct:0.2, plannedRR:3,
+      entryGrade:'B', preTradeMood:'CALIBRATED', entryReasonTags:['MTF Alignment'],
+      entries:[{size:0.5,price:1.0740}], createdAt:'2026-08-18T09:30:00Z' }),
+    // Crypto — planning
+    _mk({ id:'t7', accountId:'a4', ticker:'ETHUSDT', direction:'LONG', assetType:'CRYPTO', status:'PLANNING',
+      entryPrice:2620, stopLossPrice:2540, targetPrice:2860, positionSize:1.19, executedSize:1.19, riskAmount:95, riskPct:1.9, plannedRR:3,
+      entryGrade:'A', preTradeMood:'CALIBRATED', entryReasonTags:['4H Structure Confirmed'], setupNotes:'Waiting for 1H trigger.', createdAt:'2026-08-18T10:00:00Z' }),
+    // Backtest (isolated)
+    _mk({ id:'bx1', accountId:'bt-us', mode:'BACKTEST', ticker:'MSFT', direction:'LONG', assetType:'STOCK', status:'CLOSED',
+      entryPrice:415, stopLossPrice:405, targetPrice:445, positionSize:10, executedSize:10, riskAmount:100, plannedRR:3,
+      entryGrade:'A', entries:[{size:10,price:415}], exits:[{size:10,price:441}], realizedPnL:260, realizedR:2.6, exitGrade:'A',
+      reviewComplete:true, exitTimestamp:'2026-08-10T00:00:00Z', createdAt:'2026-08-09T00:00:00Z' }),
+    _mk({ id:'bx2', accountId:'bt-fx', mode:'BACKTEST', ticker:'XAUUSD', direction:'SHORT', assetType:'FOREX', status:'CLOSED',
+      entryPrice:2402, stopLossPrice:2416, targetPrice:2360, positionSize:0.07, executedSize:0.07, contractValue:100, riskAmount:98, plannedRR:3,
+      entryGrade:'B', entries:[{size:0.07,price:2402}], exits:[{size:0.07,price:2374}], realizedPnL:196, realizedR:2, exitGrade:'B',
+      reviewComplete:true, exitTimestamp:'2026-08-12T00:00:00Z', createdAt:'2026-08-11T00:00:00Z' })
+  ];
+}
+function _mockTradesOld() {
   var T = [
     // ── LIVE closed (mix of grades for KPIs + matrix) ──
     _mk({ id:'t1', accountId:'a1', ticker:'XAUUSD', direction:'LONG', assetType:'FOREX', status:'CLOSED',
