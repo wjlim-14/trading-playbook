@@ -3,7 +3,7 @@
    ============================================================ */
 
 /* SIDEBAR */
-#sidebar{width:var(--sb-w);background:var(--sb-bg);position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;z-index:100;overflow-y:auto;}
+#sidebar{width:var(--sb-w);background:var(--sb-bg);position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;z-index:300;overflow-y:auto;}
 .sb-brand{padding:18px 18px 12px;border-bottom:1px solid rgba(100,60,20,0.2);}
 .sb-title{font-family:var(--font-d);font-size:17px;font-weight:700;color:#1a0800;letter-spacing:0.3px;}
 .sb-sub{font-family:var(--mono);font-size:9px;color:rgba(58,26,6,0.6);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
@@ -53,7 +53,7 @@
 .page.active{display:block;}
 
 /* MOBILE NAV */
-#mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:8px 0 12px;z-index:200;}
+#mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:8px 0 calc(10px + env(safe-area-inset-bottom));z-index:200;box-shadow:0 -2px 10px rgba(44,36,22,.06);}
 .mobile-nav-inner{display:flex;justify-content:space-around;}
 .mobile-tab{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 12px;cursor:pointer;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;}
 .mobile-tab.active{color:var(--gold);}
@@ -62,16 +62,23 @@
 /* Hamburger (mobile sidebar toggle) */
 .hamburger{display:none;background:none;border:none;padding:4px;margin-right:4px;}
 .hamburger svg{width:20px;height:20px;stroke:var(--text);}
-.sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:99;}
+.sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:290;}
 
 @media(max-width:768px){
-  #sidebar{transform:translateX(-100%);transition:transform .2s;width:250px;}
+  #sidebar{transform:translateX(-100%);transition:transform .2s;width:min(84vw,280px);box-shadow:2px 0 18px rgba(0,0,0,.18);}
   #sidebar.open{transform:translateX(0);}
   .sb-backdrop.show{display:block;}
-  #main{margin-left:0;padding-bottom:72px;}
+  /* leave room for the fixed bottom nav (incl. iOS home indicator) */
+  #main{margin-left:0;padding-bottom:calc(78px + env(safe-area-inset-bottom));}
   #mobile-nav{display:block;}
-  .topbar{padding:0 14px;}
-  .content{padding:14px;}
+  .topbar{padding:0 12px;gap:8px;height:50px;}
+  .page-title{font-size:16px;}
+  .content{padding:12px;}
   .hamburger{display:block;}
-  .heat-badge{display:none;}
+  /* compact heat badge stays visible so open risk is glanceable on mobile */
+  .heat-badge{padding:3px 9px;font-size:10px;gap:4px;}
+  .topbar-r{gap:6px;}
+}
+@media(max-width:400px){
+  .heat-badge{display:none;}   /* very narrow: drop badge, heat still in drawer + Holdings banner */
 }

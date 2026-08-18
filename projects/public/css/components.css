@@ -195,8 +195,37 @@ select.fi{font-family:var(--font);cursor:pointer;}
 @keyframes slidein{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
 
 @media(max-width:768px){
-  .kpi-row{grid-template-columns:1fr 1fr;}
+  .kpi-row{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+  .kpi{padding:12px;}
+  .kpi-v{font-size:19px;}
   .cg3{grid-template-columns:1fr 1fr;}
   .cout{grid-template-columns:1fr 1fr;}
   .g32{grid-template-columns:1fr;}
+  .calc-card{padding:15px;}
+
+  /* trade rows: let the right-side pnl/grade/action wrap under the header cleanly */
+  .trow{flex-wrap:wrap;gap:8px 10px;padding:11px 12px;}
+  .tsym{width:auto;min-width:56px;}
+  .tinfo{order:3;flex-basis:100%;gap:16px;}
+  .trow > div[style*="margin-left:auto"]{margin-left:auto;}
+  .tpnl{font-size:13px;min-width:0;}
+
+  /* stat/filter tabs scroll horizontally instead of wrapping into tall stacks */
+  .stabs,.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .stab,.tab{flex:0 0 auto;}
+  .searchbar .fi{max-width:none;flex:1 1 140px;}
+
+  /* accounts + matrix */
+  .agrid{grid-template-columns:1fr;}
+  .mc-v{font-size:16px;}
+
+  /* modals hug the screen */
+  .modal{max-width:100%;}
+  .modal-b{padding:15px;}
+  .cg2{grid-template-columns:1fr 1fr;}
+
+  /* comfortable tap targets */
+  .btn-sm{padding:6px 11px;}
+  .chip{padding:6px 12px;}
+  .ptag,.rtag{padding:6px 12px;}
 }

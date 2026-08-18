@@ -13,10 +13,25 @@ window.addEventListener('load', function() {
     _renderSidebarHeat();
     _renderNavBadges();
     _setLastUpdated();
+    _renderDemoBadge();
     nav('p-dashboard');
     if (loader) loader.style.display = 'none';
   });
 });
+
+function _renderDemoBadge() {
+  var tl = document.querySelector('.topbar-l');
+  if (!tl) return;
+  var existing = document.getElementById('demo-badge');
+  if (!DEMO_MODE) { if (existing) existing.remove(); return; }
+  if (existing) return;
+  var b = document.createElement('div');
+  b.id = 'demo-badge';
+  b.title = 'Showing sample data — connect Supabase to persist real trades';
+  b.style.cssText = 'display:inline-block;background:rgba(154,124,58,.12);border:1px solid rgba(154,124,58,.35);border-radius:4px;padding:2px 8px;font-size:10px;color:var(--gold);font-weight:700;';
+  b.textContent = '● DEMO';
+  tl.appendChild(b);
+}
 
 /* ── MODE (LIVE / BACKTEST) ── */
 function setMode(m) {
