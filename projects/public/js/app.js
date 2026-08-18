@@ -1,77 +1,135 @@
+/* ============================================================
+   J.TRADEBOOK V2 — APP BOOTSTRAP & GLOBAL CHROME
+   ============================================================ */
+
 window.addEventListener('load', function() {
   var loader = document.getElementById('app-loader');
-
-  /* safety timeout — always hide loader after 6s regardless of API state */
-  var loaderTimeout = setTimeout(function() {
-    if (loader) loader.style.display = 'none';
-  }, 6000);
+  var loaderTimeout = setTimeout(function(){ if (loader) loader.style.display = 'none'; }, 8000);
 
   _initData().then(function() {
     clearTimeout(loaderTimeout);
-    _renderSidebarFooter();
+    _syncModeUI();
+    _renderAccountSwitcher();
+    _renderSidebarHeat();
+    _renderNavBadges();
     _setLastUpdated();
     nav('p-dashboard');
     if (loader) loader.style.display = 'none';
   });
 });
 
-function _initData() {
-  return Promise.all([
-    fetch('/api/accounts').then(function(r)     { if (!r.ok) throw new Error('accounts');     return r.json(); }),
-    fetch('/api/journal').then(function(r)      { if (!r.ok) throw new Error('journal');      return r.json(); }),
-    fetch('/api/transactions').then(function(r) { if (!r.ok) throw new Error('transactions'); return r.json(); }),
-    fetch('/api/prefs').then(function(r)        { if (!r.ok) throw new Error('prefs');        return r.json(); })
-  ]).then(function(results) {
-    ACCOUNTS     = results[0];
-    JOURNAL      = results[1];
-    TRANSACTIONS = results[2];
-    PREFS        = results[3];
-    _apiAvailable = true;
-  }).catch(function(e) {
-    console.warn('[J.Tradebook] API unavailable — using mock data', e);
+/* ── MODE (LIVE / BACKTEST) ── */
+function setMode(m) {
+  MODE = m;
+  _syncModeUI();
+  apiSavePrefs({ mode: m });
+  _renderSidebarHeat();
+  _renderNavBadges();
+  refreshCurrentPage();
+}
+function _syncModeUI() {
+  var live = document.getElementById('btn-live');
+  var bt = document.getElementById('btn-backtest');
+  if (live) live.classList.toggle('active', MODE === 'LIVE');
+  if (bt) { bt.classList.toggle('active', MODE === 'BACKTEST'); bt.classList.toggle('mock', MODE === 'BACKTEST'); }
+  var badge = document.getElementById('mock-badge');
+  if (badge) badge.style.display = MODE === 'BACKTEST' ? 'inline-block' : 'none';
+}
+
+/* ── ACCOUNT SWITCHER ── */
+function _renderAccountSwitcher() {
+  var sel = document.getElementById('acct-switch');
+  if (!sel) return;
+  var opts = '<option value="all">All Consolidated</option>';
+  activeAccounts().forEach(function(a){
+    opts += '<option value="' + a.id + '"' + (a.id === ACTIVE_ACCOUNT ? ' selected' : '') + '>' +
+      escapeHtml(a.name) + '</option>';
   });
+  sel.innerHTML = opts;
+  sel.value = ACTIVE_ACCOUNT;
+  _renderSwitcherBalance();
 }
-
-function _setLastUpdated() {
-  var el = document.getElementById('sb-last-updated');
+function _renderSwitcherBalance() {
+  var el = document.getElementById('acct-switch-bal');
   if (!el) return;
-  var d  = new Date();
-  var yy = d.getFullYear();
-  var mo = String(d.getMonth() + 1).padStart(2, '0');
-  var dd = String(d.getDate()).padStart(2, '0');
-  var hh = String(d.getHours()).padStart(2, '0');
-  var mi = String(d.getMinutes()).padStart(2, '0');
-  var ss = String(d.getSeconds()).padStart(2, '0');
-  el.textContent = yy + '-' + mo + '-' + dd + ' ' + hh + ':' + mi + ':' + ss;
+  if (ACTIVE_ACCOUNT === 'all') {
+    var total = activeAccounts().reduce(function(s,a){ return s + accountBalance(a.id); }, 0);
+    el.textContent = money(total, 'USD') + ' total';
+  } else {
+    var a = getAccount(ACTIVE_ACCOUNT);
+    el.textContent = a ? money(accountBalance(a.id), a.currency, 2) + ' ' + a.currency : '—';
+  }
+}
+function setActiveAccount(id) {
+  ACTIVE_ACCOUNT = id;
+  apiSavePrefs({ activeAccountId: id === 'all' ? null : id });
+  _renderSwitcherBalance();
+  _renderSidebarHeat();
+  _renderNavBadges();
+  refreshCurrentPage();
 }
 
+/* ── SIDEBAR HEAT + BADGES ── */
+function _renderSidebarHeat() {
+  var h = portfolioHeat();
+  var fill = document.getElementById('sb-heat-fill');
+  var val = document.getElementById('sb-heat-val');
+  var pctOfLimit = h.limit ? Math.min(100, h.pct / h.limit * 100) : 0;
+  if (fill) fill.style.width = pctOfLimit + '%';
+  if (val) val.innerHTML = 'Open Risk: <span>' + money(h.risk,'USD') + ' (' + h.pct + '%)</span> of ' + h.limit + '%';
+  // topbar heat badge
+  var tb = document.getElementById('topbar-heat-txt');
+  if (tb) tb.textContent = activeTrades().length + ' Active · ' + money(h.risk,'USD') + ' Heat';
+}
+function _renderNavBadges() {
+  var hb = document.getElementById('badge-holdings');
+  var jb = document.getElementById('badge-journal');
+  var openCount = planningTrades().length + activeTrades().length;
+  var pending = pendingReviews().length;
+  if (hb) { hb.textContent = openCount; hb.style.display = openCount ? 'inline-block' : 'none'; }
+  if (jb) { jb.textContent = pending; jb.style.display = pending ? 'inline-block' : 'none'; }
+}
+
+/* ── REFRESH ── */
 function _refreshData() {
   var btn = document.getElementById('sb-refresh-btn');
   if (btn) btn.style.opacity = '0.4';
   _initData().then(function() {
-    _renderSidebarFooter();
+    _syncModeUI();
+    _renderAccountSwitcher();
+    _renderSidebarHeat();
+    _renderNavBadges();
     refreshCurrentPage();
     _setLastUpdated();
     if (btn) btn.style.opacity = '1';
   });
 }
+function _setLastUpdated() {
+  var el = document.getElementById('sb-last-updated');
+  if (!el) return;
+  var d = new Date();
+  el.textContent = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+/* Called by pages after a data mutation to keep chrome in sync. */
+function _afterMutation() {
+  _renderAccountSwitcher();
+  _renderSidebarHeat();
+  _renderNavBadges();
+}
+
+/* ── MOBILE SIDEBAR ── */
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sb-backdrop').classList.add('show');
+}
+function closeSidebar() {
+  var sb = document.getElementById('sidebar');
+  var bd = document.getElementById('sb-backdrop');
+  if (sb) sb.classList.remove('open');
+  if (bd) bd.classList.remove('show');
+}
 
 window.addEventListener('resize', function() {
-  var active = document.querySelector('.page.active');
-  if (active && ['p-dashboard', 'p-perf'].includes(active.id)) {
-    renderPage(active.id);
-  }
+  if (['p-dashboard','p-backtest'].indexOf(_currentPage) >= 0) refreshCurrentPage();
 });
-
-function _renderSidebarFooter() {
-  var el = document.getElementById('sb-footer');
-  if (!el) return;
-  el.innerHTML =
-    '<div class="sidebar-footer-title">Account Equity</div>' +
-    ACCOUNTS.map(function(a) {
-      return '<div class="sidebar-acct">' +
-        '<span class="sidebar-acct-name">' + a.name.split(' ')[0] + '</span>' +
-        '<span class="sidebar-acct-eq">' + a.symbol + fmt(a.equity, 0) + '</span>' +
-      '</div>';
-    }).join('');
-}

@@ -1,106 +1,191 @@
+/* ============================================================
+   J.TRADEBOOK V2 — HOLDINGS (Stage 2 EXECUTE, Stage 3 EXIT)
+   Portfolio heat, PLANNING/ACTIVE/CLOSED TODAY tabs, expandable
+   rows, chart paste, Mark as Executed, Close Trade modal.
+   ============================================================ */
+
+var HOLD_TAB = 'ACTIVE';
+var _expanded = {};
+
 function renderHoldings() {
-  var holdings     = getHoldings();
-  var totalUnr     = holdings.reduce(function(s,t){ return s + (calcUnrealisedPnL(t)||0); }, 0);
-  var totalRiskAmt = holdings.reduce(function(s,t){ return s + calcRiskAmt(t); }, 0);
+  var el = document.getElementById('p-holdings');
+  var heat = portfolioHeat();
+  var over = heat.pct > heat.limit;
 
-  var root = document.getElementById('p-holdings');
-  root.innerHTML = '<div class="page-content">' +
-    '<div class="page-header-row page-header">' +
-      '<div><div class="page-title">Holdings</div><div class="page-subtitle">Open positions — live risk tracking</div></div>' +
-      '<button class="btn btn-primary" onclick="openTradeModal(null)">+ Add Position</button>' +
+  var planning = planningTrades();
+  var active = activeTrades();
+  var closedToday = closedTodayTrades();
+  var counts = { PLANNING: planning.length, ACTIVE: active.length, 'CLOSED TODAY': closedToday.length };
+  var lists = { PLANNING: planning, ACTIVE: active, 'CLOSED TODAY': closedToday };
+
+  var dups = duplicateExposure();
+  var dupHtml = dups.length
+    ? '<div class="warn-banner">⚠️ Duplicate exposure — multiple open positions on: <strong>' + dups.join(', ') + '</strong></div>'
+    : '';
+
+  var tabs = ['PLANNING','ACTIVE','CLOSED TODAY'].map(function(t){
+    return '<button class="stab' + (HOLD_TAB===t?' active':'') + '" onclick="setHoldTab(\'' + t + '\')">' + t + ' (' + counts[t] + ')</button>';
+  }).join('');
+
+  var rows = lists[HOLD_TAB].map(holdingRow).join('');
+  if (!rows) rows = '<div class="empty">No ' + HOLD_TAB.toLowerCase() + ' trades' + (MODE==='BACKTEST'?' (Backtest)':'') + '.</div>';
+
+  el.innerHTML =
+    (MODE==='BACKTEST' ? '<div class="mock-banner"><span style="font-size:15px">🧪</span><div><strong>Backtest Mode</strong> — showing simulated positions.</div></div>' : '') +
+    '<div class="heat-banner' + (over?' over':'') + '">' +
+      '<div style="display:flex;align-items:center;gap:8px"><div class="dot"></div><span style="font-weight:500">Portfolio Heat</span>' +
+        '<span style="font-family:var(--mono);font-weight:700;color:' + (over?'var(--red)':'var(--amber)') + '">' + money(heat.risk,'USD') + ' (' + heat.pct + '%) open risk</span></div>' +
+      '<span style="font-size:10px;color:var(--muted)">Limit: ' + heat.limit + '%</span>' +
     '</div>' +
+    dupHtml +
+    '<div class="stabs">' + tabs + '</div>' +
+    '<div class="tlist">' + rows + '</div>';
 
-    /* stats row */
-    '<div class="stats-row">' +
-      statCard('Open Positions',  holdings.length, 'active trades', 'gold') +
-      statCard('Unrealised P&L',  (totalUnr >= 0 ? '+' : '') + fmt(totalUnr, 0), 'across all positions', totalUnr >= 0 ? 'pos' : 'neg') +
-    '</div>' +
+  wireTradeSlots(el, function(){ _afterMutation(); renderHoldings(); });
+}
 
-    /* holdings table */
-    '<div class="card mb-16"><div class="card-title">Active Positions</div><div class="tbl-wrap"><table>' +
-      '<thead><tr><th>Asset</th><th>Market</th><th>Dir</th><th>Entry</th><th>Current</th><th>SL</th><th>TP</th><th>Units</th><th>Risk Amt</th><th>R Live</th><th>Unrealised</th><th></th></tr></thead>' +
-      '<tbody id="holdings-body"></tbody>' +
-    '</table></div></div>' +
+function setHoldTab(t) { HOLD_TAB = t; renderHoldings(); }
+function toggleExpand(id) { _expanded[id] = !_expanded[id]; renderHoldings(); }
 
-    /* risk rules section */
-    '<div class="card"><div class="card-title-row"><div class="card-title" style="margin:0">Portfolio Risk</div>' +
-      '<span class="text-sm text-muted">' + fmt(getTotalOpenRisk(), 2) + '% of ' + PREFS.dailyLimitPct + '% limit</span>' +
-    '</div>' + _riskGaugeHtml() + '</div>' +
+function holdingRow(t) {
+  var acc = getAccount(t.accountId);
+  var cur = acc ? acc.currency : 'USD';
+  var open = !!_expanded[t.id];
+  var isClosed = t.status === 'CLOSED';
 
-    '<div class="card"><div class="accordion-header" onclick="_toggleRules()" style="cursor:pointer;">' +
-      '<span style="font-weight:600;font-size:13px;">Trading Rules</span>' +
-      '<span class="accordion-arrow" id="rules-arrow">▼</span>' +
-    '</div>' +
-    '<div class="accordion-body" id="rules-body">' + _rulesHtml() + '</div></div>' +
-
-    (typeof journalModal === 'function' ? journalModal() : '') +
-  '</div>';
-
-  /* fill holdings table */
-  var tbody = document.getElementById('holdings-body');
-  if (tbody) {
-    tbody.innerHTML = holdings.length ? holdings.map(function(t) {
-      var unr  = calcUnrealisedPnL(t);
-      var rl   = calcRLive(t);
-      var risk = calcRiskAmt(t);
-      var acct = getAccount(t.accountId);
-      var cur  = acct ? acct.currency : '';
-      return '<tr>' +
-        '<td class="td-asset">' + t.asset + '</td>' +
-        '<td>' + marketBadge(t.market) + '</td>' +
-        '<td>' + dirBadge(t.dir) + '</td>' +
-        '<td class="td-mono">' + fmt(t.entry, 4) + '</td>' +
-        '<td class="td-mono">' + (t.currentPrice ? fmt(t.currentPrice, 4) : '—') + '</td>' +
-        '<td class="td-mono text-neg">' + fmt(t.sl, 4) + '</td>' +
-        '<td class="td-mono text-pos">' + fmt(t.tp, 4) + '</td>' +
-        '<td class="td-mono">' + fmt(t.units, t.units < 10 ? 3 : 0) + '</td>' +
-        '<td class="td-mono text-neg">' + fmt(risk, 0) + ' ' + cur + '</td>' +
-        '<td>' + rHtml(rl) + '</td>' +
-        '<td class="td-mono ' + (unr >= 0 ? 'text-pos' : 'text-neg') + '">' + (unr != null ? (unr >= 0 ? '+' : '') + fmt(unr, 0) + ' ' + cur : '—') + '</td>' +
-        '<td><button class="edit-btn" onclick="openTradeModal(' + t.id + ')" title="Edit">✏</button></td>' +
-      '</tr>';
-    }).join('') : '<tr><td colspan="12" class="empty-state">No open positions</td></tr>';
+  var infoFields;
+  if (isClosed) {
+    var pnl = tradePnL(t);
+    infoFields =
+      '<div class="tf"><div class="tfl">Entry→Exit</div><div class="tfv">' + t.entryPrice + '→' + t.exitPrice + '</div></div>' +
+      '<div class="tf"><div class="tfl">R</div><div class="tfv ' + pnlClass(tradeR(t)) + '">' + rStr(tradeR(t)) + '</div></div>';
+  } else {
+    infoFields =
+      '<div class="tf"><div class="tfl">Entry</div><div class="tfv">' + t.entryPrice + '</div></div>' +
+      '<div class="tf"><div class="tfl">SL</div><div class="tfv">' + t.stopLossPrice + '</div></div>' +
+      '<div class="tf"><div class="tfl">TP</div><div class="tfv">' + (t.targetPrice!=null?t.targetPrice:'—') + '</div></div>' +
+      '<div class="tf"><div class="tfl">Risk</div><div class="tfv text-neg">' + money(t.riskAmount,cur) + '</div></div>';
   }
-}
 
-function _riskGaugeHtml() {
-  var pct    = getTotalOpenRisk();
-  var limit  = PREFS.dailyLimitPct;
-  var barPct = Math.min((pct / limit) * 100, 100);
-  var cls    = pct <= limit * 0.5 ? 'safe' : pct <= limit * 0.8 ? 'caution' : 'danger';
+  var actionBtn = '';
+  if (t.status === 'PLANNING')
+    actionBtn = '<button class="btn btn-green btn-sm" onclick="event.stopPropagation();markExecuted(\'' + t.id + '\')">✓ Executed</button>';
+  else if (t.status === 'ACTIVE')
+    actionBtn = '<button class="btn btn-red btn-sm" onclick="event.stopPropagation();openCloseModal(\'' + t.id + '\')">Close</button>';
 
-  var rows = getHoldings().map(function(t) {
-    var acct  = getAccount(t.accountId);
-    var risk  = calcRiskAmt(t);
-    var rpct  = acct ? (risk / acct.equity * 100) : 0;
-    var rCls  = rpct <= 2 ? 'text-pos' : rpct <= 3 ? 'text-gold' : 'text-neg';
-    return '<div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:12px;padding:5px 0;border-bottom:1px solid var(--border2);">' +
-      '<span>' + t.asset + ' <span class="text-muted">' + t.market + '</span></span>' +
-      '<span class="' + rCls + '">' + fmt(risk, 0) + ' ' + (acct ? acct.currency : '') + ' (' + rpct.toFixed(2) + '%)</span>' +
-    '</div>';
-  }).join('');
+  var right = isClosed
+    ? '<div class="tpnl ' + pnlClass(tradePnL(t)) + '">' + moneySigned(tradePnL(t),cur) + '</div>'
+    : gradePill('Entry', t.entryGrade);
 
-  return '<div class="risk-bar-wrap">' +
-    '<div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:12px;margin-bottom:4px;">' +
-      '<span class="' + (pct <= limit ? 'text-pos' : 'text-neg') + '">' + fmt(pct, 2) + '% deployed</span>' +
-      '<span class="text-muted">Limit: ' + limit + '%</span>' +
+  return '<div class="tcard">' +
+    '<div class="trow" onclick="toggleExpand(\'' + t.id + '\')">' +
+      '<div class="tsym">' + escapeHtml(t.ticker) + '</div>' + dirBadge(t.direction) + statusBadge(t.status) +
+      '<div class="tinfo">' + infoFields + '</div>' +
+      '<div style="margin-left:auto;display:flex;align-items:center;gap:8px">' + right + actionBtn + '</div>' +
     '</div>' +
-    '<div class="risk-bar-track"><div class="risk-bar-fill ' + cls + '" style="width:' + barPct + '%"></div></div>' +
-    '<div class="risk-bar-labels"><span>0%</span><span>' + (limit/2) + '%</span><span>' + limit + '%</span></div>' +
-  '</div>' +
-  (rows ? '<div class="mt-16">' + rows + '</div>' : '');
+    '<div class="tdetail' + (open?' show':'') + '" id="det-' + t.id + '">' + (open ? holdingDetail(t) : '') + '</div>' +
+  '</div>';
 }
 
-function _rulesHtml() {
-  return RULES.map(function(r) {
-    return '<div class="rule-item"><div class="rule-dot"></div><div class="rule-text">' + r.text + '</div></div>';
-  }).join('');
+function holdingDetail(t) {
+  var reasons = (t.entryReasonTags||[]).map(function(r){ return '<span class="ptag sel">' + escapeHtml(r) + '</span>'; }).join('');
+  var charts =
+    '<div class="cpair">' +
+      chartSlotHtml(t.preChartUrl4H, '4H Big TF', t.id + '|preChartUrl4H') +
+      chartSlotHtml(t.preChartUrl1H, '1H Entry TF', t.id + '|preChartUrl1H') +
+    '</div>';
+  var extra = '';
+  if (t.status === 'PLANNING')
+    extra = '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-green btn-full" onclick="markExecuted(\'' + t.id + '\')">✓ Mark as Executed</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="deleteTrade(\'' + t.id + '\')">Delete</button></div>';
+  else if (t.status === 'ACTIVE')
+    extra = '<button class="btn btn-red btn-full" style="margin-top:10px" onclick="openCloseModal(\'' + t.id + '\')">Close Trade</button>';
+
+  return charts +
+    (reasons ? '<div class="ptags">' + reasons + '</div>' : '') +
+    '<div class="rfbox"><div class="rfl">Setup Notes</div>' +
+      '<textarea class="rfinp" onblur="saveSetupNotes(\'' + t.id + '\',this.value)" placeholder="Setup notes…">' + escapeHtml(t.setupNotes||'') + '</textarea></div>' +
+    extra;
 }
 
-function _toggleRules() {
-  var body  = document.getElementById('rules-body');
-  var arrow = document.getElementById('rules-arrow');
-  if (!body) return;
-  body.classList.toggle('open');
-  if (arrow) arrow.textContent = body.classList.contains('open') ? '▲' : '▼';
+/* ── ACTIONS ── */
+function markExecuted(id) {
+  apiUpdateTrade({ id:id, status:'ACTIVE', entryTimestamp: nowIso() }).then(function(){
+    toast('Marked ACTIVE', 'ok'); HOLD_TAB = 'ACTIVE'; _afterMutation(); renderHoldings();
+  }).catch(function(e){ toast('Failed: ' + e.message, 'err'); });
+}
+
+function saveSetupNotes(id, val) {
+  var t = TRADES.find(function(x){ return x.id===id; });
+  if (t && t.setupNotes === val) return;
+  apiUpdateTrade({ id:id, setupNotes: val });
+}
+
+function deleteTrade(id) {
+  openModal({
+    title: 'Delete trade?',
+    body: '<p style="font-size:13px;color:var(--text2)">This permanently removes the planned trade.</p>',
+    footer: '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>' +
+            '<button class="btn btn-red" onclick="confirmDeleteTrade(\'' + id + '\')">Delete</button>'
+  });
+}
+function confirmDeleteTrade(id) {
+  apiDeleteTrade(id).then(function(){ closeModal(); toast('Deleted','ok'); _afterMutation(); renderHoldings(); });
+}
+
+/* ── CLOSE TRADE MODAL ── */
+var _closeState = null;
+function openCloseModal(id) {
+  var t = TRADES.find(function(x){ return x.id===id; });
+  if (!t) return;
+  _closeState = { id:id, exit: t.targetPrice != null ? t.targetPrice : t.entryPrice, preset:'TP' };
+  var acc = getAccount(t.accountId);
+  openModal({
+    title: 'Close Trade · ' + escapeHtml(t.ticker),
+    body:
+      '<div class="field"><div class="fl">Quick Exit</div><div style="display:flex;gap:6px;margin-top:5px">' +
+        '<button class="btn btn-green btn-sm" style="flex:1" id="cp-TP" onclick="closePreset(\'TP\',' + t.targetPrice + ')">Hit TP</button>' +
+        '<button class="btn btn-red btn-sm" style="flex:1" id="cp-SL" onclick="closePreset(\'SL\',' + t.stopLossPrice + ')">Hit SL</button>' +
+        '<button class="btn btn-ghost btn-sm" style="flex:1" id="cp-BE" onclick="closePreset(\'BE\',' + t.entryPrice + ')">Breakeven</button>' +
+      '</div></div>' +
+      '<div class="field"><div class="fl">Exit Price</div><input class="fi" id="close-exit" value="' + _closeState.exit + '" oninput="closeCustom(this.value)"></div>' +
+      '<div class="cout" style="grid-template-columns:1fr 1fr;margin:6px 0 0">' +
+        '<div class="oi"><div class="ol">Realized R</div><div class="ov" id="close-r">—</div></div>' +
+        '<div class="oi"><div class="ol">Realized PnL</div><div class="ov" id="close-pnl">—</div></div>' +
+      '</div>',
+    footer: '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>' +
+            '<button class="btn btn-gold" onclick="confirmClose()">Close Trade</button>',
+    onMount: function(){ closePaint(); }
+  });
+}
+function closePreset(p, price) { _closeState.preset = p; _closeState.exit = price; var i=document.getElementById('close-exit'); if(i)i.value=price; closePaint(); }
+function closeCustom(v) { _closeState.exit = parseFloat(v); _closeState.preset='CUSTOM'; closePaint(); }
+function closePaint() {
+  var t = TRADES.find(function(x){ return x.id===_closeState.id; });
+  var acc = getAccount(t.accountId); var cur = acc?acc.currency:'USD';
+  var exit = parseFloat(_closeState.exit);
+  var rEl = document.getElementById('close-r'), pEl = document.getElementById('close-pnl');
+  if (!isFinite(exit)) { if(rEl)rEl.textContent='—'; if(pEl)pEl.textContent='—'; return; }
+  var dir = t.direction==='SHORT'?-1:1;
+  var riskDist = Math.abs(t.entryPrice - t.stopLossPrice);
+  var r = riskDist ? round(dir*(exit-t.entryPrice)/riskDist, 2) : 0;
+  var pnl = round(r * (t.riskAmount||0), 2);
+  if (rEl) { rEl.textContent = rStr(r); rEl.className = 'ov ' + pnlClass(r); }
+  if (pEl) { pEl.textContent = moneySigned(pnl,cur); pEl.className = 'ov ' + pnlClass(pnl); }
+}
+function confirmClose() {
+  var t = TRADES.find(function(x){ return x.id===_closeState.id; });
+  var exit = parseFloat(_closeState.exit);
+  if (!isFinite(exit)) { toast('Enter an exit price','err'); return; }
+  var dir = t.direction==='SHORT'?-1:1;
+  var riskDist = Math.abs(t.entryPrice - t.stopLossPrice);
+  var r = riskDist ? round(dir*(exit-t.entryPrice)/riskDist, 2) : 0;
+  var pnl = round(r * (t.riskAmount||0), 2);
+  apiUpdateTrade({
+    id: t.id, status:'CLOSED', exitPrice: exit, exitTimestamp: nowIso(),
+    realizedR: r, realizedPnL: pnl
+  }).then(function(){
+    closeModal(); toast('Trade closed · ' + rStr(r), 'ok');
+    HOLD_TAB = 'CLOSED TODAY'; _afterMutation(); renderHoldings();
+  }).catch(function(e){ toast('Failed: ' + e.message, 'err'); });
 }

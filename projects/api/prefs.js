@@ -22,7 +22,8 @@ export default async function handler(req, res) {
       .eq('key', 'settings')
       .single();
     if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
-    return res.json(data ? data.value : { defaultRiskPct: 2, dailyLimitPct: 6 });
+    var defaults = { defaultRiskPct: 2, dailyLimitPct: 6, mode: 'LIVE', activeAccountId: null };
+    return res.json(data ? Object.assign(defaults, data.value) : defaults);
   }
 
   if (req.method === 'PUT') {
