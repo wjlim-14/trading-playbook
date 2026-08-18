@@ -22,14 +22,17 @@ export default async function handler(req, res) {
     return res.status(200).json(out);
   }
 
+  function withTimeout(p, ms) {
+    return Promise.race([
+      Promise.resolve(p).then(function(r){ return r; }, function(e){ return { error: { message: String(e && e.message || e) } }; }),
+      new Promise(function(resolve){ setTimeout(function(){ resolve({ error: { message: 'TIMEOUT ' + ms + 'ms (host unreachable, wrong project ref, or project paused)' } }); }, ms); })
+    ]);
+  }
+
   var names = ['accounts', 'trades', 'account_transactions', 'prefs'];
   for (var i = 0; i < names.length; i++) {
-    try {
-      var r = await supabase.from(names[i]).select('*', { count: 'exact', head: true });
-      out.tables[names[i]] = r.error ? ('ERROR: ' + r.error.message) : 'ok';
-    } catch (e) {
-      out.tables[names[i]] = 'ERROR: ' + (e && e.message ? e.message : String(e));
-    }
+    var r = await withTimeout(supabase.from(names[i]).select('*', { count: 'exact', head: true }), 3500);
+    out.tables[names[i]] = r.error ? ('ERROR: ' + r.error.message) : 'ok';
   }
 
   var allOk = names.every(function(n){ return out.tables[n] === 'ok'; });
