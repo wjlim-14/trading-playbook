@@ -34,15 +34,19 @@ function _initData() {
       ACTIVE_ACCOUNT = PREFS.activeAccountId;
     }
     _apiAvailable = true;
-    DEMO_MODE = false;
-    // If the backend is reachable but empty (fresh DB), still seed the view with
-    // demo data so the UI is explorable. Real writes will replace it.
-    if (!ACCOUNTS.length && !TRADES.length) loadMockData();
+    DEMO_MODE = false;   // connected — always use real data (even if empty)
   }).catch(function(e) {
-    console.warn('[J.Tradebook] API unavailable — using demo data', e);
+    console.warn('[J.Tradebook] API unavailable', e);
     _apiAvailable = false;
-    loadMockData();
+    // Demo fallback only when the backend is unreachable, and only if not
+    // explicitly disabled with ?nodemo=1 in the URL.
+    if (_demoDisabled()) { DEMO_MODE = false; }
+    else loadMockData();
   });
+}
+
+function _demoDisabled() {
+  try { return /[?&]nodemo(=1)?(&|$)/.test(location.search); } catch (e) { return false; }
 }
 
 /* ── DEMO / MOCK DATA ──
