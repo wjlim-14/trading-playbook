@@ -2,8 +2,11 @@
    J.TRADEBOOK V2 — LAYOUT (shell, sidebar, topbar, mobile nav)
    ============================================================ */
 
-/* SIDEBAR */
-#sidebar{width:var(--sb-w);background:var(--sb-bg);position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;z-index:300;overflow-y:auto;}
+/* SHELL — sidebar + main are flex columns; overlap is structurally impossible */
+.shell{display:flex;align-items:stretch;min-height:100vh;}
+
+/* SIDEBAR (in-flow on desktop, sticky) */
+#sidebar{width:var(--sb-w);flex:0 0 var(--sb-w);background:var(--sb-bg);position:sticky;top:0;align-self:flex-start;height:100vh;display:flex;flex-direction:column;z-index:300;overflow-y:auto;}
 .sb-brand{padding:18px 18px 12px;border-bottom:1px solid rgba(100,60,20,0.2);}
 .sb-title{font-family:var(--font-d);font-size:17px;font-weight:700;color:#1a0800;letter-spacing:0.3px;}
 .sb-sub{font-family:var(--mono);font-size:9px;color:rgba(58,26,6,0.6);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
@@ -37,8 +40,8 @@
 .heat-val{font-family:var(--mono);font-size:10px;color:#3a1a06;}
 .heat-val span{color:#7a3800;font-weight:700;}
 
-/* MAIN */
-#main{margin-left:var(--sb-w);min-height:100vh;display:flex;flex-direction:column;}
+/* MAIN — flexes to fill the rest; never sits under the sidebar */
+#main{flex:1 1 0;min-width:0;min-height:100vh;display:flex;flex-direction:column;}
 .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:90;box-shadow:0 1px 3px rgba(44,36,22,0.05);}
 .topbar-l{display:flex;align-items:center;gap:10px;}
 .page-title{font-family:var(--font-d);font-size:19px;font-weight:600;}
@@ -65,11 +68,12 @@
 .sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:290;}
 
 @media(max-width:900px){
-  #sidebar{transform:translateX(-100%);transition:transform .2s;width:min(84vw,280px);box-shadow:2px 0 18px rgba(0,0,0,.18);}
+  /* off-canvas drawer: fixed removes it from flow so main is full width */
+  #sidebar{position:fixed;top:0;left:0;bottom:0;height:100vh;flex-basis:auto;transform:translateX(-100%);transition:transform .2s;width:min(84vw,280px);box-shadow:2px 0 18px rgba(0,0,0,.18);}
   #sidebar.open{transform:translateX(0);}
   .sb-backdrop.show{display:block;}
   /* leave room for the fixed bottom nav (incl. iOS home indicator) */
-  #main{margin-left:0;padding-bottom:calc(78px + env(safe-area-inset-bottom));}
+  #main{padding-bottom:calc(78px + env(safe-area-inset-bottom));}
   #mobile-nav{display:block;}
   .topbar{padding:0 12px;gap:8px;height:50px;}
   .page-title{font-size:16px;}
