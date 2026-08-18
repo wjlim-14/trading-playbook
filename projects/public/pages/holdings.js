@@ -82,8 +82,7 @@ function holdingRow(t) {
   '</div>';
 }
 
-function fmtN(v){ return v==null?'—':Number(v).toFixed(priceDp(v)); }
-function lastExitPrice(t){ var x=tradeExits(t); return x.length?x[x.length-1].price:t.exitPrice; }
+/* fmtN + lastExitPrice live in utils.js (shared) */
 
 function holdingDetail(t, st) {
   var reasons = (t.entryReasonTags||[]).map(function(r){ return '<span class="ptag sel">' + escapeHtml(r) + '</span>'; }).join('');

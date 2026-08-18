@@ -82,12 +82,12 @@ function recentRow(t) {
   var acc = getAccount(t.accountId); var cur = acc?acc.currency:'USD';
   var right, mid;
   if (t.status === 'CLOSED') {
-    mid = '<div class="tf"><div class="tfl">Entry→Exit</div><div class="tfv">' + t.entryPrice + '→' + t.exitPrice + '</div></div>' +
+    mid = '<div class="tf"><div class="tfl">Avg→Exit</div><div class="tfv">' + fmtN(tradeAvgEntry(t)) + '→' + fmtN(lastExitPrice(t)) + '</div></div>' +
           '<div class="tf"><div class="tfl">R</div><div class="tfv ' + pnlClass(tradeR(t)) + '">' + rStr(tradeR(t)) + '</div></div>';
     right = '<div class="gpill ' + gradeClass(t.entryGrade) + '">' + (t.entryGrade||'—') + '/' + (t.exitGrade||'—') + '</div>' +
             '<div class="tpnl ' + pnlClass(tradePnL(t)) + '">' + moneySigned(tradePnL(t),cur) + '</div>';
   } else {
-    mid = '<div class="tf"><div class="tfl">Entry</div><div class="tfv">' + t.entryPrice + '</div></div>' +
+    mid = '<div class="tf"><div class="tfl">Entry</div><div class="tfv">' + fmtN(tradeAvgEntry(t)) + '</div></div>' +
           '<div class="tf"><div class="tfl">Risk</div><div class="tfv text-neg">' + money(t.riskAmount,cur) + '</div></div>';
     right = gradePill('Entry', t.entryGrade) + '<div class="tpnl text-muted">Open</div>';
   }

@@ -2,8 +2,8 @@
    J.TRADEBOOK V2 — COMPONENTS
    ============================================================ */
 
-/* KPI */
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+/* KPI — fluid: fills the row, wraps gracefully at any width */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:14px;}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(44,36,22,0.05);}
 .kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
 .kpi.g::after{background:var(--green)} .kpi.r::after{background:var(--red)}
@@ -19,6 +19,7 @@
 .card-t{font-family:var(--font-d);font-size:14px;font-weight:600;}
 .card-b{padding:16px;}
 .g32{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px;}
+@media(max-width:1040px){ .g32{grid-template-columns:1fr;} }
 .divider{height:1px;background:var(--border);margin:14px 0;}
 .empty{text-align:center;color:var(--muted);font-size:12px;padding:28px 10px;}
 
@@ -44,7 +45,7 @@
 .tlist{display:flex;flex-direction:column;gap:6px;}
 .tcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:0 1px 3px rgba(44,36,22,0.04);}
 .tcard.flag{border-color:rgba(176,48,48,.3);}
-.trow{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:all .15s;}
+.trow{display:flex;align-items:center;gap:10px 12px;padding:10px 14px;cursor:pointer;transition:all .15s;flex-wrap:wrap;}
 .trow:hover{background:var(--surface2);}
 .tsym{font-family:var(--mono);font-size:13px;font-weight:700;width:74px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;}
 .tdir{font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;flex-shrink:0;}
@@ -104,15 +105,15 @@
 .fi:focus{border-color:var(--gold);background:var(--surface);}
 .fi::placeholder{color:var(--muted);}
 select.fi{font-family:var(--font);cursor:pointer;}
-.cg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;}
-.cg2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.cg3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;}
+.cg2{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px;}
 .rtog{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px;gap:3px;max-width:220px;margin-bottom:10px;}
 .rtbtn{flex:1;padding:6px;border-radius:4px;font-size:11px;font-weight:700;text-align:center;cursor:pointer;border:none;background:transparent;color:var(--muted);transition:all .15s;}
 .rtbtn.active{background:var(--surface);color:var(--gold);border:1px solid var(--border);}
 .chips{display:flex;gap:5px;flex-wrap:wrap;}
 .chip{padding:5px 12px;border-radius:4px;font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);transition:all .15s;}
 .chip:hover,.chip.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
-.cout{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin:14px 0;}
+.cout{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:14px 0;}
 .oi{text-align:center;}
 .ol{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;font-weight:600;}
 .ov{font-family:var(--mono);font-size:20px;font-weight:700;}
@@ -195,7 +196,7 @@ select.fi{font-family:var(--font);cursor:pointer;}
 .toast.ok{background:var(--green);} .toast.err{background:var(--red);}
 @keyframes slidein{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
 
-@media(max-width:768px){
+@media(max-width:900px){
   .kpi-row{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
   .kpi{padding:12px;}
   .kpi-v{font-size:19px;}

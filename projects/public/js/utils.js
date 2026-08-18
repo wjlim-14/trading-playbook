@@ -387,6 +387,8 @@ function moneySigned(n, currency) {
 }
 function rStr(v) { if (v==null) return '—'; return (v>0?'+':'') + v.toFixed(1) + 'R'; }
 function pnlClass(v) { return v > 0 ? 'text-pos' : v < 0 ? 'text-neg' : 'text-muted'; }
+function fmtN(v) { return v==null ? '—' : Number(v).toFixed(priceDp(v)); }
+function lastExitPrice(t) { var x = tradeExits(t); return x.length ? x[x.length-1].price : t.exitPrice; }
 
 /* ── HTML BADGES ── */
 function dirBadge(d) { return '<span class="tdir ' + (d==='LONG'?'dl':'ds') + '">' + d + '</span>'; }
