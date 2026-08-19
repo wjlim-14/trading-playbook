@@ -285,6 +285,12 @@ function tradeR(t) {
   if (p == null || !risk) return null;
   return round(p / risk, 2);
 }
+/* Realized PnL converted to the reporting base currency (for cross-currency sums). */
+function tradePnLBase(t) {
+  var p = tradePnL(t); if (p == null) return null;
+  var a = getAccount(t.accountId);
+  return toBase(p, a ? a.currency : 'USD');
+}
 
 /* ── VIEW FILTERS (respect global MODE + ACTIVE_ACCOUNT) ── */
 function inAccount(t) { return ACTIVE_ACCOUNT === 'all' || t.accountId === ACTIVE_ACCOUNT; }
