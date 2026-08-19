@@ -169,10 +169,26 @@ function shotsGridHtml(t, stage, editable) {
   if (!inner) inner = '<div class="empty" style="grid-column:1/-1;font-size:11px;padding:8px">No screenshots.</div>';
   return '<div class="shotgrid">' + inner + '</div>';
 }
+/* Full-screen chart viewer (web + mobile). Tap image to toggle fit/actual
+   size for detail; tap the dark area or Close to dismiss. */
 function viewShot(url) {
-  openModal({ title:'Chart', body:'<img src="' + escapeHtml(url) + '" style="width:100%;border-radius:6px;display:block">',
-    footer:'<button class="btn btn-ghost" onclick="closeModal()">Close</button>' });
+  var wrap = document.getElementById('lightbox');
+  if (!wrap) { wrap = document.createElement('div'); wrap.id = 'lightbox'; document.body.appendChild(wrap); }
+  wrap.className = 'lb-open';
+  wrap.innerHTML =
+    '<div class="lb-bar"><span class="lb-hint">tap image to zoom</span><button class="lb-x" onclick="closeLightbox()">✕ Close</button></div>' +
+    '<div class="lb-img" onclick="closeLightbox()">' +
+      '<img src="' + escapeHtml(url) + '" onclick="event.stopPropagation();lbZoom(this)">' +
+    '</div>';
+  document.addEventListener('keydown', _lbKey);
 }
+function _lbKey(e){ if (e.key === 'Escape') closeLightbox(); }
+function closeLightbox() {
+  var w = document.getElementById('lightbox');
+  if (w) { w.className = ''; w.innerHTML = ''; }
+  document.removeEventListener('keydown', _lbKey);
+}
+function lbZoom(img) { if (img && img.parentNode) img.parentNode.classList.toggle('zoom'); }
 
 /* Persist mutations (works in demo + live via apiUpdateTrade). */
 function _shotField(stage){ return stage==='pre' ? 'preShots' : 'postShots'; }
