@@ -6,7 +6,6 @@
 
 var JFILTER = { grade:'ALL', text:'', mistake:'', from:'', to:'', preset:'ALL' };
 var JVIEW = 'trades';   // trades | week | setup | calendar
-var _jexpanded = {};
 var _calMonth = null;   // YYYY-MM for calendar view
 
 function renderJournal() {
@@ -118,8 +117,7 @@ function jSetGrade(g){ JFILTER.grade=g; renderJournal(); }
 function jSetText(v){ JFILTER.text=v; jRenderList(); }
 function jSetMistake(v){ JFILTER.mistake=v; jRenderList(); }
 function jSetDate(k,v){ JFILTER[k]=v; jRenderList(); }
-function jToggle(id){ _jexpanded[id]=!_jexpanded[id]; renderJournal(); }
-function jumpToPending(){ JVIEW='trades'; var t=closedTrades().filter(function(x){return !x.reviewComplete;})[0]; if(t){_jexpanded[t.id]=true;} renderJournal(); }
+function jumpToPending(){ var t=closedTrades().filter(function(x){return !x.reviewComplete;})[0]; if(t){ _reportEdit[t.id]=true; openTradeReport(t.id); } }
 
 /* ── BY WEEK ── */
 function weekView() {
@@ -208,121 +206,222 @@ function calMonth(delta){ var m=_calMonth||todayStr().slice(0,7); var y=+m.slice
 
 function journalRow(t) {
   var acc = getAccount(t.accountId); var cur = acc?acc.currency:'USD';
-  var open = !!_jexpanded[t.id];
   var pnl = tradePnL(t);
   var needsReview = !t.reviewComplete;
 
-  var gradeArea = needsReview && !t.exitGrade
-    ? '<div style="display:flex;gap:5px;align-items:center">' + gradePill('Entry', t.entryGrade) +
-      '<span class="review-flag">⚠ REVIEW NEEDED</span></div>'
+  var gradeArea = needsReview
+    ? '<div style="display:flex;gap:5px;align-items:center">' + gradePill('Entry', t.entryGrade) + '<span class="review-flag">⚠ REVIEW</span></div>'
     : '<div style="display:flex;gap:5px">' + gradePill('Entry', t.entryGrade) + gradePill('Exit', t.exitGrade) + '</div>';
 
   return '<div class="tcard' + ((t.entryGrade==='C'||t.exitGrade==='C')?' flag':'') + '">' +
-    '<div class="trow" onclick="jToggle(\'' + t.id + '\')">' +
+    '<div class="trow" style="cursor:default">' +
       '<div class="tsym">' + escapeHtml(t.ticker) + '</div>' + dirBadge(t.direction) + statusBadge('CLOSED') +
       '<div class="tinfo">' +
         '<div class="tf"><div class="tfl">Avg→Exit</div><div class="tfv">' + fmtN(tradeAvgEntry(t)) + '→' + fmtN(lastExitPrice(t)) + '</div></div>' +
         '<div class="tf"><div class="tfl">R</div><div class="tfv ' + pnlClass(tradeR(t)) + '">' + rStr(tradeR(t)) + '</div></div>' +
       '</div>' + gradeArea +
       '<div class="tpnl ' + pnlClass(pnl) + '">' + moneySigned(pnl,cur) + '</div>' +
+      '<button class="btn btn-gold btn-sm" style="margin-left:10px;white-space:nowrap" onclick="openTradeReport(\'' + t.id + '\')">📄 Show trade</button>' +
     '</div>' +
-    '<div class="tdetail' + (open?' show':'') + '" id="jdet-' + t.id + '">' + (open?journalDetail(t):'') + '</div>' +
   '</div>';
 }
 
-var _jediting = {};
+var _reportEdit = {};
 
 var GRADE_LEGEND =
-  '<div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:8px 10px;font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.6">' +
+  '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:8px 10px;font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.6">' +
   '<strong style="color:var(--gold)">Entry Grade</strong> = setup & entry quality (set on the Calculator). ' +
-  '<strong style="color:var(--blue)">Exit Grade</strong> = trade management & exit quality (set here).<br>' +
+  '<strong style="color:var(--blue)">Exit Grade</strong> = trade management & exit quality.<br>' +
   '<span class="gpill ga" style="padding:1px 6px">A</span> disciplined · ' +
   '<span class="gpill gb" style="padding:1px 6px">B</span> acceptable · ' +
   '<span class="gpill gc" style="padding:1px 6px">C</span> rule-break</div>';
 
-function journalDetail(t) {
-  var locked = t.reviewComplete && !_jediting[t.id];
-  var acc = getAccount(t.accountId); var cur = acc?acc.currency:'USD';
-  var reasons = (t.entryReasonTags||[]).map(function(r){ return '<span class="ptag sel">' + escapeHtml(r) + '</span>'; }).join('');
-  var reasonsBlock = reasons ? '<div class="fl" style="margin:10px 0 4px">Entry Reasons</div><div class="ptags">' + reasons + '</div>' : '';
+/* ══════════════════════════════════════════════════════════════
+   TRADE REPORT — pop-out, report/analytics level. Read-only by
+   default; "Edit / Complete review" flips to the review form.
+   ══════════════════════════════════════════════════════════════ */
+function openTradeReport(id) {
+  openModal({
+    title: '📄 Trade Report', width: 940,
+    body: '<div id="trep-body"></div>',
+    footer: '<button class="btn btn-ghost" onclick="closeTradeReport()">Close</button>'
+  });
+  renderTradeReport(id);
+}
+function closeTradeReport() {
+  closeModal();
+  if (document.getElementById('p-journal')) renderJournal();
+}
+function renderTradeReport(id) {
+  var t = TRADES.find(function(x){ return x.id===id; });
+  var host = document.getElementById('trep-body');
+  if (!t || !host) return;
+  host.innerHTML = _reportEdit[id] ? tradeReportEditBody(t) : tradeReportViewBody(t);
+  wireShotSlots(host, function(){ renderTradeReport(id); });
+}
+function tradeReportEdit(id, on) { _reportEdit[id] = on; renderTradeReport(id); }
 
-  var body;
-  if (locked) {
-    // READ-ONLY view — study without touching anything
-    var mtagsRO = (t.mistakeTags||[]).map(function(m){ return '<span class="ptag ' + (m!=='Clean Execution'?'bad ':'') + 'sel">' + escapeHtml(m) + '</span>'; }).join('') || '<span style="font-size:11px;color:var(--muted)">—</span>';
-    body =
-      '<div style="display:flex;gap:8px;align-items:center;margin:6px 0 10px">' + gradePill('Entry', t.entryGrade) + gradePill('Exit', t.exitGrade) +
-        '<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="jEdit(\'' + t.id + '\')">✎ Edit review</button></div>' +
-      '<div class="fl" style="margin-bottom:6px">Mistake / Exit Tags</div><div class="ptags">' + mtagsRO + '</div>' +
-      '<div class="rfbox" style="margin-top:8px"><div class="rfl">💭 Takeaway</div>' +
-        '<div style="font-size:13px">' + (escapeHtml(t.reflectionNote||'') || '<span style="color:var(--muted)">—</span>') + '</div></div>' +
-      '<div class="review-done">✓ Review complete · locked (press Edit to change)</div>';
-  } else {
-    var grades = [['A','Followed Plan'],['B','Early Exit OK'],['C','Panic / Moved SL']];
-    var gradeBtns = grades.map(function(g){
-      return '<button class="gbtn g' + g[0].toLowerCase() + '-s' + (t.exitGrade===g[0]?' sel':'') + '" onclick="setExitGrade(\'' + t.id + '\',\'' + g[0] + '\')">' +
-        '<div class="gl">' + g[0] + '</div><div class="gd">' + g[1] + '</div></button>';
-    }).join('');
-    var mtags = exitReasons().map(function(m){
-      var sel = (t.mistakeTags||[]).indexOf(m) >= 0;
-      var bad = m !== 'Clean Execution';
-      return '<span class="ptag' + (bad?' bad':'') + (sel?' sel':'') + '" onclick="toggleMistake(\'' + t.id + '\',\'' + escapeHtml(m).replace(/'/g,"\\'") + '\')">' + escapeHtml(m) + '</span>';
-    }).join('');
-    body =
-      '<div class="fl" style="margin:10px 0 6px">Exit Grade <span style="color:var(--red)">*required</span></div><div class="grow" style="margin-bottom:12px">' + gradeBtns + '</div>' +
-      '<div class="fl" style="margin-bottom:6px">Exit / Mistake Tags <span style="color:var(--red)">*at least one</span></div><div class="ptags">' + mtags + '</div>' +
+/* ── small helpers ── */
+function _gradeMeaning(kind, g) {
+  var m = { entry:{A:'Perfect Setup',B:'Slight Hesitation',C:'Chased / Low Q'},
+            exit:{A:'Followed Plan',B:'Early Exit OK',C:'Panic / Moved SL'} };
+  return (m[kind] && m[kind][g]) || '';
+}
+function gLetter(g) {
+  if (!g) return '<span class="rep-muted">—</span>';
+  return '<span class="gpill g' + g.toLowerCase() + '" style="padding:1px 8px">' + g + '</span>';
+}
+function gradeBadgeText(kind, g) {
+  if (!g) return '<span class="rep-muted">— not graded</span>';
+  return gLetter(g) + ' <span style="font-size:12px;color:var(--text2)">' + _gradeMeaning(kind, g) + '</span>';
+}
+function tradeEntryTime(t) {
+  if (t.entryTimestamp) return t.entryTimestamp;
+  var e = tradeEntries(t); return (e[0] && e[0].time) || null;
+}
+function tradeExitTime(t) {
+  if (t.exitTimestamp) return t.exitTimestamp;
+  var x = tradeExits(t); return (x.length && x[x.length-1].time) || null;
+}
+function holdDuration(t) {
+  var a = tradeEntryTime(t), b = tradeExitTime(t);
+  if (!a || !b) return '—';
+  var ms = new Date(b) - new Date(a);
+  if (!(ms > 0)) return '—';
+  var d = Math.floor(ms/86400000), h = Math.floor((ms%86400000)/3600000);
+  if (d) return (d + 'd' + (h?' '+h+'h':''));
+  var mn = Math.floor((ms%3600000)/60000);
+  return h ? (h + 'h' + (mn?' '+mn+'m':'')) : (mn + 'm');
+}
+/* Big captioned screenshots for the report (read-only). */
+function reportShotsHtml(t, stage) {
+  var shots = stage==='pre' ? tradePreShots(t) : tradePostShots(t);
+  if (!shots.length) return '<div class="rep-noshot">No ' + (stage==='pre'?'pre':'post') + '-trade screenshots</div>';
+  var hi = tradeTfHigh(t), lo = tradeTfLow(t);
+  return '<div class="repshots">' + shots.map(function(s, i){
+    var role = s.tf===hi ? 'HIGH TF' : (s.tf===lo ? 'LOW TF' : '');
+    var cap = (role ? role + ' · ' : '') + String(s.tf||'').toUpperCase();
+    return '<figure class="repshot" data-shotview="' + t.id + '|' + stage + '|' + i + '">' +
+      '<img src="' + escapeHtml(s.url) + '" alt="chart">' +
+      '<figcaption>' + escapeHtml(cap) + '</figcaption></figure>';
+  }).join('') + '</div>';
+}
+function reportFills(t) {
+  var e = tradeEntries(t), x = tradeExits(t);
+  if (!e.length && !x.length) return '';
+  function row(kind, l, cls){
+    return '<div class="rep-fill"><span class="rep-fk ' + cls + '">' + kind + '</span>' +
+      '<span class="rep-fp">' + fmtN(l.size) + ' @ ' + fmtN(l.price) + '</span>' +
+      '<span class="rep-ft">' + (l.time?fmtMYT(l.time):'') + '</span>' +
+      (l.note ? '<span class="rep-fn">' + escapeHtml(l.note) + '</span>' : '') + '</div>';
+  }
+  var rows = e.map(function(l){ return row('IN', l, 'in'); }).join('') +
+             x.map(function(l){ return row('OUT', l, 'out'); }).join('');
+  return '<div class="rep-sec"><div class="rep-sech">EXECUTION</div><div class="rep-fills">' + rows + '</div></div>';
+}
+
+/* ── REPORT · VIEW (read-only, report level) ── */
+function tradeReportViewBody(t) {
+  var acc = getAccount(t.accountId); var cur = acc?acc.currency:'USD';
+  var pnl = tradePnL(t), r = tradeR(t);
+  var result = pnl>0 ? 'WIN' : (pnl<0 ? 'LOSS' : 'BREAK-EVEN');
+  var acls = acc ? assetClassMeta(acc.assetClass).label : '';
+  var unit = acc ? assetClassMeta(acc.assetClass).unit.toLowerCase() : '';
+  var _et = tradeEntryTime(t), _xt = tradeExitTime(t);
+  var dates = (_et?fmtMYT(_et):'—') + (_xt?'  →  '+fmtMYT(_xt):'');
+  var pending = !t.reviewComplete;
+
+  var head =
+    '<div class="rep-head">' +
+      '<div class="rep-title"><span class="rep-tk">' + escapeHtml(t.ticker) + '</span>' + dirBadge(t.direction) + statusBadge('CLOSED') +
+        (pending?' <span class="review-flag">⚠ PENDING REVIEW</span>':'') + '</div>' +
+      '<div class="rep-sub">' + escapeHtml(acc?acc.name:'') + ' · ' + escapeHtml(acls) + ' · ' + dates + '</div>' +
+      '<button class="btn btn-gold btn-sm rep-editbtn" onclick="tradeReportEdit(\'' + t.id + '\',true)">' + (pending?'✓ Complete review':'✎ Edit') + '</button>' +
+    '</div>';
+
+  function tile(l,v,cls){ return '<div class="rep-tile"><div class="rep-tl">' + l + '</div><div class="rep-tv ' + (cls||'') + '">' + v + '</div></div>'; }
+  var tiles = '<div class="rep-tiles">' +
+    tile('Net P&amp;L', moneySigned(pnl,cur), pnlClass(pnl)) +
+    tile('R Multiple', rStr(r), pnlClass(r)) +
+    tile('Result', result, pnl>0?'g':(pnl<0?'r':'')) +
+    tile('Risk (1R)', money(tradePlannedRisk(t)||0,cur), '') +
+    tile('Hold', holdDuration(t), '') +
+  '</div>';
+
+  function kv(l,v){ return '<div class="rep-kvi"><div class="rep-kvl">' + l + '</div><div class="rep-kvv">' + v + '</div></div>'; }
+  var numbers = '<div class="rep-kv">' +
+    kv('Avg Entry', fmtN(tradeAvgEntry(t))) +
+    kv('Exit', fmtN(lastExitPrice(t))) +
+    kv('Stop', fmtN(t.stopLossPrice)) +
+    kv('Target', fmtN(t.targetPrice)) +
+    kv('Size', fmtN(tradeEntrySize(t)) + (unit?' '+unit:'')) +
+    kv('Planned R:R', t.plannedRR?('1:'+t.plannedRR):'—') +
+    kv('Entry Grade', gLetter(t.entryGrade)) +
+    kv('Exit Grade', gLetter(t.exitGrade)) +
+  '</div>';
+
+  var reasons = (t.entryReasonTags||[]).map(function(x){ return '<span class="ptag sel">' + escapeHtml(x) + '</span>'; }).join('') || '<span class="rep-muted">—</span>';
+  var pre = '<div class="rep-sec"><div class="rep-sech">PRE-TRADE ANALYSIS</div>' +
+    '<div class="rep-tf">Timeframes &nbsp;<b>High ' + escapeHtml(tradeTfHigh(t)) + '</b> &nbsp;·&nbsp; <b>Low ' + escapeHtml(tradeTfLow(t)) + '</b></div>' +
+    reportShotsHtml(t, 'pre') +
+    '<div class="rep-lbl">Entry reasons</div><div class="ptags">' + reasons + '</div>' +
+    (t.setupNotes ? '<div class="rep-lbl">Plan / setup</div><div class="rep-note">' + escapeHtml(t.setupNotes) + '</div>' : '') +
+  '</div>';
+
+  var mtags = (t.mistakeTags||[]).map(function(m){ return '<span class="ptag ' + (m!=='Clean Execution'?'bad ':'') + 'sel">' + escapeHtml(m) + '</span>'; }).join('') || '<span class="rep-muted">—</span>';
+  var post = '<div class="rep-sec"><div class="rep-sech">POST-TRADE REVIEW</div>' +
+    (pending ? '<div class="rep-pending">⚠ Not reviewed yet — click <b>Complete review</b> above to grade the exit and log your takeaway.</div>' : '') +
+    reportShotsHtml(t, 'post') +
+    '<div class="rep-lbl">Exit grade</div><div>' + gradeBadgeText('exit', t.exitGrade) + '</div>' +
+    '<div class="rep-lbl">Mistake / exit tags</div><div class="ptags">' + mtags + '</div>' +
+    '<div class="rep-lbl">Takeaway</div><div class="rep-note">' + (escapeHtml(t.reflectionNote||'') || '<span class="rep-muted">—</span>') + '</div>' +
+  '</div>';
+
+  return head + tiles + numbers + pre + post + reportFills(t) + tradeLogHtml(t);
+}
+
+/* ── REPORT · EDIT (review form) ── */
+function tradeReportEditBody(t) {
+  var grades = [['A','Followed Plan'],['B','Early Exit OK'],['C','Panic / Moved SL']];
+  var gradeBtns = grades.map(function(g){
+    return '<button class="gbtn g' + g[0].toLowerCase() + '-s' + (t.exitGrade===g[0]?' sel':'') + '" onclick="setExitGrade(\'' + t.id + '\',\'' + g[0] + '\')">' +
+      '<div class="gl">' + g[0] + '</div><div class="gd">' + g[1] + '</div></button>';
+  }).join('');
+  var mtags = exitReasons().map(function(m){
+    var sel = (t.mistakeTags||[]).indexOf(m) >= 0; var bad = m !== 'Clean Execution';
+    return '<span class="ptag' + (bad?' bad':'') + (sel?' sel':'') + '" onclick="toggleMistake(\'' + t.id + '\',\'' + escapeHtml(m).replace(/'/g,"\\'") + '\')">' + escapeHtml(m) + '</span>';
+  }).join('');
+  var reasons = (t.entryReasonTags||[]).map(function(x){ return '<span class="ptag sel">' + escapeHtml(x) + '</span>'; }).join('');
+
+  return '<div class="rep-editbar"><b>Editing trade</b>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openEditFillsModal(\'' + t.id + '\', function(){ openTradeReport(\'' + t.id + '\'); })">✎ Fix price / size</button>' +
+      '<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="tradeReportEdit(\'' + t.id + '\',false)">Done → view</button></div>' +
+    GRADE_LEGEND +
+    '<div class="jblock jpre"><div class="jblock-h">📋 PRE-TRADE <span>setup &amp; charts</span></div>' +
+      tfPickerRow(t) +
+      '<div class="rep-lbl">Pre-trade screenshots</div>' + shotsGridHtml(t, 'pre', true) +
+      (reasons ? '<div class="rep-lbl">Entry reasons</div><div class="ptags">' + reasons + '</div>' : '') +
+    '</div>' +
+    '<div class="jblock jpost"><div class="jblock-h">🎯 POST-TRADE <span>exit &amp; review</span></div>' +
+      '<div class="rep-lbl">Post-trade screenshots</div>' + shotsGridHtml(t, 'post', true) +
+      '<div class="rep-lbl">Exit Grade <span style="color:var(--red)">*required</span></div><div class="grow" style="margin-bottom:12px">' + gradeBtns + '</div>' +
+      '<div class="rep-lbl">Exit / Mistake Tags <span style="color:var(--red)">*at least one</span></div><div class="ptags">' + mtags + '</div>' +
       '<div class="rfbox" style="margin-top:8px"><div class="rfl">💭 What did the market teach you?</div>' +
         '<textarea class="rfinp" onblur="saveReflection(\'' + t.id + '\',this.value)" placeholder="One sentence — what did this trade teach you?">' + escapeHtml(t.reflectionNote||'') + '</textarea></div>' +
-      '<button class="btn btn-gold btn-full" style="margin-top:10px" onclick="markReviewed(\'' + t.id + '\')">✓ ' + (t.reviewComplete?'Save changes & lock':'Mark as Reviewed') + '</button>';
-  }
-
-  // Outcome one-liner — see the result at a glance
-  var statLine =
-    '<div class="jstat">' +
-      '<span>' + escapeHtml(t.ticker) + ' ' + escapeHtml(t.direction||'') + '</span>' +
-      '<span>Avg ' + fmtN(tradeAvgEntry(t)) + ' → Exit ' + fmtN(lastExitPrice(t)) + '</span>' +
-      '<span class="' + pnlClass(tradeR(t)) + '">' + rStr(tradeR(t)) + '</span>' +
-      '<span class="' + pnlClass(tradePnL(t)) + '">' + moneySigned(tradePnL(t),cur) + '</span>' +
+      '<button class="btn btn-gold btn-full" style="margin-top:10px" onclick="markReviewed(\'' + t.id + '\')">✓ ' + (t.reviewComplete?'Save changes':'Mark as Reviewed & view') + '</button>' +
     '</div>';
-
-  var editTradeBar =
-    '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">' +
-      '<button class="btn btn-ghost btn-sm" onclick="openEditFillsModal(\'' + t.id + '\', renderJournal)">✎ Edit trade (fix price / size)</button>' +
-    '</div>';
-
-  // PRE-TRADE block — setup, plan, entry-side screenshots
-  var preBlock =
-    '<div class="jblock jpre">' +
-      '<div class="jblock-h">📋 PRE-TRADE <span>setup &amp; plan</span></div>' +
-      tfPickerRow(t) +
-      shotsGridHtml(t, 'pre', true) +
-      '<div style="display:flex;gap:6px;margin:2px 0 4px">' + gradePill('Entry', t.entryGrade) + '</div>' +
-      reasonsBlock +
-      (t.setupNotes ? '<div class="rfbox" style="margin-top:8px"><div class="rfl">Setup / Plan</div><div style="font-size:12px;white-space:pre-wrap">' + escapeHtml(t.setupNotes) + '</div></div>' : '') +
-    '</div>';
-
-  // POST-TRADE block — exit-side screenshots + the review (grade, tags, takeaway)
-  var postBlock =
-    '<div class="jblock jpost">' +
-      '<div class="jblock-h">🎯 POST-TRADE <span>exit &amp; review</span></div>' +
-      shotsGridHtml(t, 'post', true) +
-      body +
-    '</div>';
-
-  return editTradeBar + statLine + GRADE_LEGEND + preBlock + postBlock + tradeLogHtml(t);
 }
 
 /* ── ACTIONS ── */
-function jEdit(id) { _jediting[id] = true; renderJournal(); }
 function setExitGrade(id, g) {
-  saveTradeLog({ id:id, exitGrade:g }, 'Exit grade set to ' + g).then(function(){ renderJournal(); });
+  saveTradeLog({ id:id, exitGrade:g }, 'Exit grade set to ' + g).then(function(){ renderTradeReport(id); });
 }
 function toggleMistake(id, m) {
   var t = TRADES.find(function(x){ return x.id===id; });
   var tags = (t.mistakeTags||[]).slice();
   var i = tags.indexOf(m);
   if (i>=0) tags.splice(i,1); else tags.push(m);
-  apiUpdateTrade({ id:id, mistakeTags: tags }).then(function(){ renderJournal(); });
+  apiUpdateTrade({ id:id, mistakeTags: tags }).then(function(){ renderTradeReport(id); });
 }
 function saveReflection(id, val) {
   var t = TRADES.find(function(x){ return x.id===id; });
@@ -335,7 +434,7 @@ function markReviewed(id) {
   if (!(t.mistakeTags && t.mistakeTags.length)) { toast('Select at least one exit / mistake tag','err'); return; }
   saveTradeLog({ id:id, reviewComplete:true },
     'Reviewed · Exit grade ' + t.exitGrade + ' · tags: ' + (t.mistakeTags||[]).join(', ')).then(function(){
-    _jediting[id] = false;
-    toast('Review complete','ok'); _afterMutation(); renderJournal();
+    _reportEdit[id] = false;
+    toast('Review complete','ok'); _afterMutation(); renderTradeReport(id);
   }).catch(function(e){ toast('Failed: '+e.message,'err'); });
 }
