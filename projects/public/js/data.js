@@ -18,30 +18,37 @@ var DEMO_MODE      = false;    // true when running on local mock data (API unav
 
 /* ── BOOTSTRAP ── */
 function _initData() {
-  return Promise.all([
-    fetch('/api/accounts').then(okJson('accounts')),
-    fetch('/api/trades').then(okJson('trades')),
-    fetch('/api/transactions').then(okJson('transactions')),
-    fetch('/api/prefs').then(okJson('prefs'))
-  ]).then(function(r) {
-    ACCOUNTS     = r[0] || [];
-    TRADES       = r[1] || [];
-    TRANSACTIONS = r[2] || [];
-    PREFS        = Object.assign({ defaultRiskPct:2, dailyLimitPct:6 }, r[3] || {});
+  // Load each endpoint independently — one failing endpoint must NOT drop the
+  // whole app to demo. Demo is only for a truly unreachable backend.
+  function getJson(path){ return fetch(path).then(function(r){ if(!r.ok) throw new Error(path+' '+r.status); return r.json(); }); }
+  return Promise.allSettled([
+    getJson('/api/accounts'),
+    getJson('/api/trades'),
+    getJson('/api/transactions'),
+    getJson('/api/prefs')
+  ]).then(function(res) {
+    var val = function(r){ return r.status === 'fulfilled' ? r.value : null; };
+    var acc = val(res[0]), tr = val(res[1]), tx = val(res[2]), pr = val(res[3]);
+    res.forEach(function(r,i){ if (r.status==='rejected') console.warn('[J.Tradebook] endpoint failed:', ['accounts','trades','transactions','prefs'][i], r.reason && r.reason.message); });
+
+    // Backend is "reachable" if the core endpoints (accounts/trades) responded.
+    var reachable = acc !== null || tr !== null;
+    if (!reachable) {
+      _apiAvailable = false;
+      if (_demoDisabled()) { DEMO_MODE = false; ACCOUNTS=[]; TRADES=[]; TRANSACTIONS=[]; }
+      else loadMockData();
+      return;
+    }
+    _apiAvailable = true;
+    DEMO_MODE = false;                 // connected — real data, even if one endpoint hiccuped
+    ACCOUNTS     = acc || [];
+    TRADES       = tr  || [];
+    TRANSACTIONS = tx  || [];
+    PREFS        = Object.assign({ defaultRiskPct:2, dailyLimitPct:6 }, pr || {});
     MODE = PREFS.mode || 'LIVE';
-    // default active account = first non-archived, or 'all'
     if (PREFS.activeAccountId && ACCOUNTS.some(function(a){return a.id===PREFS.activeAccountId;})) {
       ACTIVE_ACCOUNT = PREFS.activeAccountId;
     }
-    _apiAvailable = true;
-    DEMO_MODE = false;   // connected — always use real data (even if empty)
-  }).catch(function(e) {
-    console.warn('[J.Tradebook] API unavailable', e);
-    _apiAvailable = false;
-    // Demo fallback only when the backend is unreachable, and only if not
-    // explicitly disabled with ?nodemo=1 in the URL.
-    if (_demoDisabled()) { DEMO_MODE = false; }
-    else loadMockData();
   });
 }
 
