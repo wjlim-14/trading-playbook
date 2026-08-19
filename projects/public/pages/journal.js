@@ -104,42 +104,67 @@ function journalRow(t) {
   '</div>';
 }
 
+var _jediting = {};
+
+var GRADE_LEGEND =
+  '<div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:8px 10px;font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.6">' +
+  '<strong style="color:var(--gold)">Entry Grade</strong> = setup & entry quality (set on the Calculator). ' +
+  '<strong style="color:var(--blue)">Exit Grade</strong> = trade management & exit quality (set here).<br>' +
+  '<span class="gpill ga" style="padding:1px 6px">A</span> disciplined · ' +
+  '<span class="gpill gb" style="padding:1px 6px">B</span> acceptable · ' +
+  '<span class="gpill gc" style="padding:1px 6px">C</span> rule-break</div>';
+
 function journalDetail(t) {
-  var grades = [['A','Followed Plan'],['B','Early Exit OK'],['C','Panic / Moved SL']];
-  var gradeBtns = grades.map(function(g){
-    return '<button class="gbtn g' + g[0].toLowerCase() + '-s' + (t.exitGrade===g[0]?' sel':'') + '" onclick="setExitGrade(\'' + t.id + '\',\'' + g[0] + '\')">' +
-      '<div class="gl">' + g[0] + '</div><div class="gd">' + g[1] + '</div></button>';
-  }).join('');
-
-  var mtags = exitReasons().map(function(m){
-    var sel = (t.mistakeTags||[]).indexOf(m) >= 0;
-    var bad = m !== 'Clean Execution';
-    return '<span class="ptag' + (bad?' bad':'') + (sel?' sel':'') + '" onclick="toggleMistake(\'' + t.id + '\',\'' + escapeHtml(m).replace(/'/g,"\\'") + '\')">' + escapeHtml(m) + '</span>';
-  }).join('');
-
-  var reasons = (t.entryReasonTags||[]).map(function(r){ return '<span class="ptag sel">' + escapeHtml(r) + '</span>'; }).join('');
-
-  return '<div class="cpair">' +
+  var locked = t.reviewComplete && !_jediting[t.id];
+  var charts =
+    '<div class="cpair">' +
       chartSlotHtml(t.preChartUrl4H, '4H Pre-Trade', t.id + '|preChartUrl4H') +
       chartSlotHtml(t.preChartUrl1H, '1H Pre-Trade', t.id + '|preChartUrl1H') +
     '</div>' +
     '<div class="cpair">' +
       chartSlotHtml(t.postChartUrl4H, '4H Post-Exit', t.id + '|postChartUrl4H') +
       chartSlotHtml(t.postChartUrl1H, '1H Post-Exit', t.id + '|postChartUrl1H') +
-    '</div>' +
-    (reasons ? '<div class="fl" style="margin:10px 0 4px">Entry Reasons</div><div class="ptags">' + reasons + '</div>' : '') +
-    '<div class="fl" style="margin:10px 0 6px">Exit Grade</div><div class="grow" style="margin-bottom:12px">' + gradeBtns + '</div>' +
-    '<div class="fl" style="margin-bottom:6px">Mistake Tags</div><div class="ptags">' + mtags + '</div>' +
-    '<div class="rfbox" style="margin-top:8px"><div class="rfl">💭 What did the market teach you?</div>' +
-      '<textarea class="rfinp" onblur="saveReflection(\'' + t.id + '\',this.value)" placeholder="One sentence — what did this trade teach you?">' + escapeHtml(t.reflectionNote||'') + '</textarea></div>' +
-    (t.reviewComplete
-      ? '<div class="review-done">✓ Review complete</div>'
-      : '<button class="btn btn-gold btn-full" style="margin-top:10px" onclick="markReviewed(\'' + t.id + '\')">✓ Mark as Reviewed</button>');
+    '</div>';
+  var reasons = (t.entryReasonTags||[]).map(function(r){ return '<span class="ptag sel">' + escapeHtml(r) + '</span>'; }).join('');
+  var reasonsBlock = reasons ? '<div class="fl" style="margin:10px 0 4px">Entry Reasons</div><div class="ptags">' + reasons + '</div>' : '';
+
+  var body;
+  if (locked) {
+    // READ-ONLY view — study without touching anything
+    var mtagsRO = (t.mistakeTags||[]).map(function(m){ return '<span class="ptag ' + (m!=='Clean Execution'?'bad ':'') + 'sel">' + escapeHtml(m) + '</span>'; }).join('') || '<span style="font-size:11px;color:var(--muted)">—</span>';
+    body =
+      '<div style="display:flex;gap:8px;align-items:center;margin:6px 0 10px">' + gradePill('Entry', t.entryGrade) + gradePill('Exit', t.exitGrade) +
+        '<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="jEdit(\'' + t.id + '\')">✎ Edit review</button></div>' +
+      '<div class="fl" style="margin-bottom:6px">Mistake / Exit Tags</div><div class="ptags">' + mtagsRO + '</div>' +
+      '<div class="rfbox" style="margin-top:8px"><div class="rfl">💭 Takeaway</div>' +
+        '<div style="font-size:13px">' + (escapeHtml(t.reflectionNote||'') || '<span style="color:var(--muted)">—</span>') + '</div></div>' +
+      '<div class="review-done">✓ Review complete · locked (press Edit to change)</div>';
+  } else {
+    var grades = [['A','Followed Plan'],['B','Early Exit OK'],['C','Panic / Moved SL']];
+    var gradeBtns = grades.map(function(g){
+      return '<button class="gbtn g' + g[0].toLowerCase() + '-s' + (t.exitGrade===g[0]?' sel':'') + '" onclick="setExitGrade(\'' + t.id + '\',\'' + g[0] + '\')">' +
+        '<div class="gl">' + g[0] + '</div><div class="gd">' + g[1] + '</div></button>';
+    }).join('');
+    var mtags = exitReasons().map(function(m){
+      var sel = (t.mistakeTags||[]).indexOf(m) >= 0;
+      var bad = m !== 'Clean Execution';
+      return '<span class="ptag' + (bad?' bad':'') + (sel?' sel':'') + '" onclick="toggleMistake(\'' + t.id + '\',\'' + escapeHtml(m).replace(/'/g,"\\'") + '\')">' + escapeHtml(m) + '</span>';
+    }).join('');
+    body =
+      '<div class="fl" style="margin:10px 0 6px">Exit Grade <span style="color:var(--red)">*required</span></div><div class="grow" style="margin-bottom:12px">' + gradeBtns + '</div>' +
+      '<div class="fl" style="margin-bottom:6px">Exit / Mistake Tags <span style="color:var(--red)">*at least one</span></div><div class="ptags">' + mtags + '</div>' +
+      '<div class="rfbox" style="margin-top:8px"><div class="rfl">💭 What did the market teach you?</div>' +
+        '<textarea class="rfinp" onblur="saveReflection(\'' + t.id + '\',this.value)" placeholder="One sentence — what did this trade teach you?">' + escapeHtml(t.reflectionNote||'') + '</textarea></div>' +
+      '<button class="btn btn-gold btn-full" style="margin-top:10px" onclick="markReviewed(\'' + t.id + '\')">✓ ' + (t.reviewComplete?'Save changes & lock':'Mark as Reviewed') + '</button>';
+  }
+
+  return charts + reasonsBlock + GRADE_LEGEND + body + tradeLogHtml(t);
 }
 
 /* ── ACTIONS ── */
+function jEdit(id) { _jediting[id] = true; renderJournal(); }
 function setExitGrade(id, g) {
-  apiUpdateTrade({ id:id, exitGrade:g }).then(function(){ renderJournal(); });
+  saveTradeLog({ id:id, exitGrade:g }, 'Exit grade set to ' + g).then(function(){ renderJournal(); });
 }
 function toggleMistake(id, m) {
   var t = TRADES.find(function(x){ return x.id===id; });
@@ -156,7 +181,10 @@ function saveReflection(id, val) {
 function markReviewed(id) {
   var t = TRADES.find(function(x){ return x.id===id; });
   if (!t.exitGrade) { toast('Select an exit grade first','err'); return; }
-  apiUpdateTrade({ id:id, reviewComplete:true }).then(function(){
+  if (!(t.mistakeTags && t.mistakeTags.length)) { toast('Select at least one exit / mistake tag','err'); return; }
+  saveTradeLog({ id:id, reviewComplete:true },
+    'Reviewed · Exit grade ' + t.exitGrade + ' · tags: ' + (t.mistakeTags||[]).join(', ')).then(function(){
+    _jediting[id] = false;
     toast('Review complete','ok'); _afterMutation(); renderJournal();
   }).catch(function(e){ toast('Failed: '+e.message,'err'); });
 }

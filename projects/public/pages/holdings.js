@@ -126,7 +126,20 @@ function holdingDetail(t, st) {
     fills +
     '<div class="rfbox"><div class="rfl">Setup Notes</div>' +
       '<textarea class="rfinp" onblur="saveSetupNotes(\'' + t.id + '\',this.value)" placeholder="Setup notes…">' + escapeHtml(t.setupNotes||'') + '</textarea></div>' +
+    tradeLogHtml(t) +
     actions;
+}
+
+/* Timestamped audit trail (Malaysia time), newest first. */
+function tradeLogHtml(t) {
+  var log = t.log || [];
+  if (!log.length) return '';
+  var rows = log.slice().reverse().map(function(e){
+    return '<div style="display:flex;gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0">' + fmtMYT(e.time) + '</span>' +
+      '<span style="font-size:11px">' + escapeHtml(e.text) + '</span></div>';
+  }).join('');
+  return '<div class="rfbox" style="margin-top:8px"><div class="rfl">📋 Trade Log</div>' +
+    '<div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto">' + rows + '</div></div>';
 }
 
 function fillsHistory(t) {
@@ -149,7 +162,8 @@ function markExecuted(id) {
   var t = TRADES.find(function(x){ return x.id===id; });
   var size = (t.executedSize != null && t.executedSize>0) ? t.executedSize : t.positionSize;
   var entries = [{ size: size, price: t.entryPrice, time: nowIso() }];
-  apiUpdateTrade({ id:id, status:'ACTIVE', entries: entries, executedSize: size, entryTimestamp: t.entryTimestamp || nowIso() }).then(function(){
+  saveTradeLog({ id:id, status:'ACTIVE', entries: entries, executedSize: size, entryTimestamp: t.entryTimestamp || nowIso() },
+    'Executed · ' + size + ' @ ' + t.entryPrice).then(function(){
     toast('Marked ACTIVE', 'ok'); HOLD_TAB = 'ACTIVE'; _afterMutation(); renderHoldings();
   }).catch(function(e){ toast('Failed: ' + e.message, 'err'); });
 }
@@ -184,8 +198,10 @@ function confirmAdd(id) {
   var price = parseFloat(document.getElementById('add-price').value);
   if (!isFinite(size) || size<=0 || !isFinite(price)) { toast('Enter size & price','err'); return; }
   var entries = (t.entries&&t.entries.length?t.entries.slice():tradeEntries(t).slice());
-  entries.push({ size:size, price:price, time:nowIso(), note:document.getElementById('add-note').value.trim() });
-  apiUpdateTrade({ id:id, entries:entries, status:'ACTIVE' }).then(function(){
+  var addNote = document.getElementById('add-note').value.trim();
+  entries.push({ size:size, price:price, time:nowIso(), note:addNote });
+  saveTradeLog({ id:id, entries:entries, status:'ACTIVE' },
+    'Added ' + size + ' @ ' + price + (addNote?' · '+addNote:'')).then(function(){
     closeModal(); toast('Added to position','ok'); _afterMutation(); renderHoldings();
   }).catch(function(e){ toast('Failed: '+e.message,'err'); });
 }
@@ -232,7 +248,8 @@ function confirmPartial() {
   if (!isFinite(size) || size<=0 || !isFinite(price)) { toast('Enter size & price','err'); return; }
   if (size > openSz + 1e-6) { toast('Size exceeds open position','err'); return; }
   var exits = (t.exits&&t.exits.length?t.exits.slice():tradeExits(t).filter(function(){return false;}));
-  exits.push({ size:size, price:price, time:nowIso(), note:document.getElementById('p-note').value.trim() });
+  var pnote = document.getElementById('p-note').value.trim();
+  exits.push({ size:size, price:price, time:nowIso(), note:pnote });
   var remaining = round(openSz - size, 6);
   var patch = { id:_partial.id, exits:exits, exitTimestamp: nowIso() };
   if (remaining <= 1e-6) {
@@ -245,7 +262,8 @@ function confirmPartial() {
   } else {
     patch.status = 'PARTIAL';
   }
-  apiUpdateTrade(patch).then(function(){
+  var logTxt = 'Took partial ' + size + ' @ ' + price + (pnote?' · '+pnote:'') + (remaining<=1e-6 ? ' · position CLOSED' : ' · ' + remaining + ' left');
+  saveTradeLog(patch, logTxt).then(function(){
     closeModal();
     toast(remaining<=1e-6 ? 'Trade closed' : 'Partial booked', 'ok');
     HOLD_TAB = remaining<=1e-6 ? 'CLOSED TODAY' : 'ACTIVE';
@@ -268,7 +286,7 @@ function openStopModal(id) {
 function confirmStop(id) {
   var sl = parseFloat(document.getElementById('s-sl').value);
   if (!isFinite(sl)) { toast('Enter a stop price','err'); return; }
-  apiUpdateTrade({ id:id, stopLossPrice:sl }).then(function(){ closeModal(); toast('Stop moved','ok'); _afterMutation(); renderHoldings(); });
+  saveTradeLog({ id:id, stopLossPrice:sl }, 'Moved stop to ' + sl).then(function(){ closeModal(); toast('Stop moved','ok'); _afterMutation(); renderHoldings(); });
 }
 
 /* ── CLOSE ALL ── */
@@ -313,9 +331,11 @@ function confirmClose() {
   exits.push({ size: tradeOpenSize(t), price: exit, time: nowIso(), note:'close all' });
   var tmp = Object.assign({}, t, { exits: exits });
   var pnl = tradeRealizedPnL(tmp), risk = tradePlannedRisk(tmp);
-  apiUpdateTrade({ id:t.id, status:'CLOSED', exits:exits, exitPrice:exit, exitTimestamp:nowIso(),
-    realizedPnL: pnl, realizedR: pnl!=null&&risk?round(pnl/risk,2):null }).then(function(){
-    closeModal(); toast('Trade closed · ' + rStr(pnl!=null&&risk?round(pnl/risk,2):null), 'ok');
+  var rMult = pnl!=null&&risk?round(pnl/risk,2):null;
+  saveTradeLog({ id:t.id, status:'CLOSED', exits:exits, exitPrice:exit, exitTimestamp:nowIso(),
+    realizedPnL: pnl, realizedR: rMult },
+    'Closed all @ ' + exit + ' · ' + rStr(rMult) + ' · PnL ' + moneySigned(pnl, (getAccount(t.accountId)||{}).currency||'USD')).then(function(){
+    closeModal(); toast('Trade closed · ' + rStr(rMult), 'ok');
     HOLD_TAB='CLOSED TODAY'; _afterMutation(); renderHoldings();
   }).catch(function(e){ toast('Failed: '+e.message,'err'); });
 }

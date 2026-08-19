@@ -89,7 +89,7 @@ function _mk(o) {
   return Object.assign({
     mode:'LIVE', entryReasonTags:[], mistakeTags:[], reviewComplete:false,
     preChartUrl4H:null, preChartUrl1H:null, postChartUrl4H:null, postChartUrl1H:null,
-    setupNotes:'', reflectionNote:''
+    setupNotes:'', reflectionNote:'', log:[]
   }, o);
 }
 
@@ -125,7 +125,13 @@ function _mockTradesV3() {
       entryGrade:'A', preTradeMood:'CALIBRATED', entryReasonTags:['1H Consolidation Breakout','High Breaking High'], setupNotes:'Secured initial capital at +2R, runner to the moon.',
       entries:[{size:0.058,price:61200,time:'2026-08-16T18:00:00Z'}],
       exits:[{size:0.029,price:65100,time:'2026-08-17T10:00:00Z',note:'secured initial capital'}],
-      exitTimestamp:'2026-08-17T10:00:00Z', createdAt:'2026-08-16T18:00:00Z' }),
+      exitTimestamp:'2026-08-17T10:00:00Z', createdAt:'2026-08-16T18:00:00Z',
+      log:[
+        {time:'2026-08-16T18:00:00Z', text:'Planned · LONG BTCUSDT @ 61200, SL 59500 · size 0.058 units · Entry grade A'},
+        {time:'2026-08-16T18:05:00Z', text:'Executed · 0.058 @ 61200'},
+        {time:'2026-08-17T10:00:00Z', text:'Took partial 0.029 @ 65100 · secured initial capital · 0.029 left'},
+        {time:'2026-08-17T10:01:00Z', text:'Moved stop to 61200 (breakeven)'}
+      ] }),
     // US stock — active
     _mk({ id:'t5', accountId:'a1', ticker:'AAPL', direction:'LONG', assetType:'STOCK', status:'ACTIVE',
       entryPrice:228.5, stopLossPrice:222, targetPrice:248, positionSize:18, executedSize:18, riskAmount:117, riskPct:0.9, plannedRR:3,
@@ -281,6 +287,21 @@ function apiSavePrefs(p) {
 function apiUpload(dataUrl, name) {
   if (DEMO_MODE) return Promise.resolve(dataUrl);   // keep the pasted image in-memory
   return _req('/api/upload', 'POST', { data: dataUrl, name: name }).then(function(r){ return r ? r.url : null; });
+}
+
+/* ── TRADE LOG (audit trail) ──
+   Append a timestamped event to a trade's log and return the new array to
+   include in the next PATCH. */
+function _appendLog(id, text) {
+  var t = TRADES.find(function(x){ return x.id === id; });
+  var log = (t && t.log) ? t.log.slice() : [];
+  log.push({ time: new Date().toISOString(), text: text });
+  return log;
+}
+/* Update a trade AND record a log line in one call. */
+function saveTradeLog(patch, text) {
+  if (text) patch.log = _appendLog(patch.id, text);
+  return apiUpdateTrade(patch);
 }
 
 /* ── local array helpers ── */

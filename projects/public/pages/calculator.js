@@ -101,7 +101,7 @@ function renderCalculator() {
       '<div class="divider"></div>' +
       '<div class="fl" style="margin-bottom:8px">Entry Grade</div><div class="grow" style="margin-bottom:14px">' + gradeBtns + '</div>' +
       '<div class="fl" style="margin-bottom:8px">Pre-Trade Mindset</div><div class="mrow" style="margin-bottom:12px">' + moodBtns + '</div>' +
-      '<div class="fl" style="margin-bottom:6px">Entry Reasons <span style="color:var(--muted)">· edit in Settings</span></div><div class="rtags" style="margin-bottom:14px">' + reasonBtns + '</div>' +
+      '<div class="fl" style="margin-bottom:6px">Entry Reasons <span style="color:var(--red)">*required</span> <span style="color:var(--muted)">· edit in Settings</span></div><div class="rtags" style="margin-bottom:14px">' + reasonBtns + '</div>' +
       '<div class="rfbox" style="margin-bottom:14px"><div class="rfl">Setup Notes (optional)</div>' +
         '<textarea class="rfinp" id="c-notes" placeholder="What is the setup?" oninput="calcSet(\'setupNotes\',this.value)">' + escapeHtml(CALC.setupNotes) + '</textarea></div>' +
       '<button class="btn btn-gold btn-full" onclick="calcSaveToPlan()">💾 Save to Plan → Holdings</button>' +
@@ -155,6 +155,7 @@ function calcPaint() {
   set('o-rr', '1:' + Number(CALC.rr).toFixed(1));
   // risk notes
   var note = riskNote(c.assetClass, CALC.ticker, c.entry, c.sl, c.riskAmt, c.account);
+  if (note && c.ps && c.ps.contract) note += ' · ' + c.ps.contract;
   set('risk-note', note || 'Enter price + stop to see your risk breakdown.');
   var totalOpen = activeTrades().reduce(function(s,t){ return s + tradeOpenRisk(t); }, 0);
   var combined = totalOpen + (c.riskAmt || 0);
@@ -175,6 +176,7 @@ function calcSaveToPlan() {
   if (!isFinite(c.entry) || !isFinite(c.sl)) { toast('Enter entry & stop loss', 'err'); return; }
   if (!c.riskAmt) { toast('Set a risk amount', 'err'); return; }
   if (c.entry === c.sl) { toast('Entry and SL cannot be equal', 'err'); return; }
+  if (!CALC.reasons.length) { toast('Select at least one entry reason', 'err'); return; }
 
   var trade = {
     accountId: CALC.accountId,
@@ -198,7 +200,8 @@ function calcSaveToPlan() {
     setupNotes: CALC.setupNotes,
     entries: [],
     exits: [],
-    entryTimestamp: nowIso()
+    entryTimestamp: nowIso(),
+    log: [{ time: nowIso(), text: 'Planned · ' + CALC.direction + ' ' + CALC.ticker.trim().toUpperCase() + ' @ ' + c.entry + ', SL ' + c.sl + ' · size ' + c.ps.size + ' ' + c.ps.unit + ' · risk ' + money(c.riskAmt, c.currency) + ' · Entry grade ' + CALC.entryGrade }]
   };
   apiCreateTrade(trade).then(function(row){
     if (!row) { toast('Save failed', 'err'); return; }

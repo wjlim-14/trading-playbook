@@ -155,10 +155,12 @@ function computePositionSize(assetClass, ticker, entry, sl, riskAmt) {
     out.size = round(riskAmt / dist, 4); out.unit = 'Units'; out.valuePerPoint = 1;
   } else { // FOREX / CFD
     var spec = forexSpec(ticker, entry);
+    var isFxPair = /^[A-Z]{6}$/.test(ticker.toUpperCase()) && ticker.toUpperCase().indexOf('XAU') < 0 && ticker.toUpperCase().indexOf('XAG') < 0;
     out.valuePerPoint = spec.valuePerPoint; out.pip = spec.pip;
     out.size = round(riskAmt / (dist * spec.valuePerPoint), 2);
     out.unit = 'Lots';
-    out.sub = Math.round(dist / spec.pip) + ' pips';
+    out.sub = isFxPair ? (Math.round(dist / spec.pip) + ' pips') : ('$' + dist.toFixed(2) + ' move');
+    out.contract = '$' + spec.valuePerPoint.toFixed(spec.valuePerPoint < 100 ? 1 : 0) + ' per 1.0 move / lot';
   }
   return out;
 }
@@ -171,7 +173,8 @@ function riskNote(assetClass, ticker, entry, sl, riskAmt, account) {
   var priceStr;
   if (assetClass === 'FOREX') {
     var spec = forexSpec(ticker, entry);
-    priceStr = Math.round(dist / spec.pip) + ' pips (' + pctOfEntry + '% of price)';
+    var isFxPair = /^[A-Z]{6}$/.test((ticker||'').toUpperCase()) && (ticker||'').toUpperCase().indexOf('XAU')<0 && (ticker||'').toUpperCase().indexOf('XAG')<0;
+    priceStr = (isFxPair ? Math.round(dist / spec.pip) + ' pips' : '$' + fmtPrice(dist, entry) + ' move') + ' (' + pctOfEntry + '% of price)';
   } else {
     priceStr = fmtPrice(dist, entry) + ' move (' + pctOfEntry + '% of entry)';
   }
@@ -463,6 +466,14 @@ function todayStr() {
 }
 function nowIso() { return new Date().toISOString(); }
 function shortDate(iso) { return iso ? String(iso).slice(0,10) : '—'; }
+/* Malaysia-time formatter for the trade log / timestamps */
+function fmtMYT(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('en-GB', { timeZone:'Asia/Kuala_Lumpur',
+      day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }) + ' MYT';
+  } catch (e) { return String(iso).slice(0,16).replace('T',' '); }
+}
 
 /* ── constants shared by pages ──
    Reason/mistake lists have editable defaults; user overrides live in PREFS

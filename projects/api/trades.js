@@ -61,7 +61,8 @@ function toDb(t) {
     postChartUrl1H:  'post_chart_url_1h',
     mistakeTags:     'mistake_tags',
     reflectionNote:  'reflection_note',
-    reviewComplete:  'review_complete'
+    reviewComplete:  'review_complete',
+    log:             'log'
   };
   var row = {};
   Object.keys(map).forEach(function(k) {
@@ -111,6 +112,7 @@ function fromDb(row) {
     mistakeTags:     row.mistake_tags || [],
     reflectionNote:  row.reflection_note || '',
     reviewComplete:  !!row.review_complete,
+    log:             row.log || [],
     createdAt:       row.created_at || null
   };
 }
