@@ -1,0 +1,48 @@
+/* ============================================================
+   J.TRADEBOOK V2 — BASE (design tokens, resets, typography)
+   ============================================================ */
+:root{
+  /* Sidebar */
+  --sb-bg:#cfa270; --sb-text:#3a1a06; --sb-active:rgba(255,255,255,0.28); --sb-w:220px;
+
+  /* Surfaces (cream light theme) */
+  --bg:#f5f0e8; --surface:#fff; --surface2:#f0ebe0;
+  --border:#ddd5c0; --border2:#c8bda8;
+  --text:#2c2416; --text2:#5c4e38; --muted:#9a8a72;
+
+  /* Accents */
+  --gold:#9a7c3a; --gold2:#b89448; --gold-dim:rgba(154,124,58,0.10);
+  --green:#2a7a50; --green-bg:rgba(42,122,80,0.10); --green-bd:rgba(42,122,80,0.25);
+  --red:#b03030;   --red-bg:rgba(176,48,48,0.08);   --red-bd:rgba(176,48,48,0.25);
+  --blue:#2558a0;  --blue-bg:rgba(37,88,160,0.08);
+  --amber:#b06820;
+
+  --r:6px; --radius-sm:5px;
+  --font-d:'Playfair Display',Georgia,'Times New Roman',serif;
+  --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --font-body:var(--font);
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
+  --font-mono:var(--mono);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13.5px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;
+  -webkit-text-size-adjust:100%;}
+
+a{color:inherit;text-decoration:none;}
+button{font-family:var(--font);cursor:pointer;}
+input,select,textarea{font-family:var(--font);}
+
+/* Typographic helpers */
+.mono{font-family:var(--mono);}
+.text-pos{color:var(--green);}
+.text-neg{color:var(--red);}
+.text-muted{color:var(--muted);}
+.text-gold{color:var(--gold);}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+::-webkit-scrollbar-track{background:transparent;}

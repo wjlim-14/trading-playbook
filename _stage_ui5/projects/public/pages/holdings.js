@@ -32,27 +32,14 @@ function renderHoldings() {
   el.innerHTML =
     (MODE==='BACKTEST' ? '<div class="mock-banner"><span style="font-size:15px">🧪</span><div><strong>Backtest Mode</strong> — simulated positions.</div></div>' : '') +
     '<div class="heat-banner' + (over?' over':'') + '">' +
-      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div class="dot"></div><span style="font-weight:500">Portfolio Heat</span>' +
-        '<span style="font-family:var(--mono);font-weight:700;color:' + (over?'var(--red)':'var(--amber)') + '">' + money(heat.risk,heat.currency) + ' (' + heat.pct + '%) open risk' + (ACTIVE_ACCOUNT==='all'?' ≈'+heat.currency:'') + '</span></div>' +
+      '<div style="display:flex;align-items:center;gap:8px"><div class="dot"></div><span style="font-weight:500">Portfolio Heat</span>' +
+        '<span style="font-family:var(--mono);font-weight:700;color:' + (over?'var(--red)':'var(--amber)') + '">' + money(heat.risk,'USD') + ' (' + heat.pct + '%) open risk</span></div>' +
       '<span style="font-size:10px;color:var(--muted)">Limit: ' + heat.limit + '%</span>' +
-    '</div>' +
-    (ACTIVE_ACCOUNT==='all' ? perAccountHeatRow() : '') + dupHtml +
+    '</div>' + dupHtml +
     '<div class="stabs">' + tabs + '</div>' +
     '<div class="tlist">' + rows + '</div>';
 
   wireTradeSlots(el, function(){ _afterMutation(); renderHoldings(); });
-}
-
-function perAccountHeatRow() {
-  var rows = perAccountHeat();
-  if (!rows.length) return '';
-  var chips = rows.map(function(r){
-    var over = r.pct > (PREFS.dailyLimitPct||6);
-    return '<span style="display:inline-flex;gap:6px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 11px;font-size:11px">' +
-      '<span style="font-weight:600">' + escapeHtml(r.account.name.split(' ')[0]) + '</span>' +
-      '<span style="font-family:var(--mono);color:' + (over?'var(--red)':'var(--amber)') + '">' + money(r.risk,r.currency) + ' (' + r.pct + '%)</span></span>';
-  }).join('');
-  return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">' + chips + '</div>';
 }
 
 function setHoldTab(t) { HOLD_TAB = t; renderHoldings(); }
@@ -118,12 +105,6 @@ function holdingDetail(t, st) {
         '<button class="btn btn-gold btn-sm" onclick="openPartialModal(\'' + t.id + '\')">Take partial</button>' +
         '<button class="btn btn-ghost btn-sm" onclick="openStopModal(\'' + t.id + '\')">Move stop</button>' +
         '<button class="btn btn-red btn-sm" onclick="openCloseModal(\'' + t.id + '\')">Close all</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="openEditFillsModal(\'' + t.id + '\', renderHoldings)">✎ Edit fills</button>' +
-      '</div>';
-  } else if (st === 'CLOSED') {
-    actions =
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' +
-        '<button class="btn btn-ghost btn-sm" onclick="openEditFillsModal(\'' + t.id + '\', renderHoldings)">✎ Edit fills (fix price / re-open)</button>' +
       '</div>';
   }
 
@@ -132,20 +113,7 @@ function holdingDetail(t, st) {
     fills +
     '<div class="rfbox"><div class="rfl">Setup Notes</div>' +
       '<textarea class="rfinp" onblur="saveSetupNotes(\'' + t.id + '\',this.value)" placeholder="Setup notes…">' + escapeHtml(t.setupNotes||'') + '</textarea></div>' +
-    tradeLogHtml(t) +
     actions;
-}
-
-/* Timestamped audit trail (Malaysia time), newest first. */
-function tradeLogHtml(t) {
-  var log = t.log || [];
-  if (!log.length) return '';
-  var rows = log.slice().reverse().map(function(e){
-    return '<div style="display:flex;gap:8px;align-items:baseline"><span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0">' + fmtMYT(e.time) + '</span>' +
-      '<span style="font-size:11px">' + escapeHtml(e.text) + '</span></div>';
-  }).join('');
-  return '<div class="rfbox" style="margin-top:8px"><div class="rfl">📋 Trade Log</div>' +
-    '<div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto">' + rows + '</div></div>';
 }
 
 function fillsHistory(t) {
@@ -168,8 +136,7 @@ function markExecuted(id) {
   var t = TRADES.find(function(x){ return x.id===id; });
   var size = (t.executedSize != null && t.executedSize>0) ? t.executedSize : t.positionSize;
   var entries = [{ size: size, price: t.entryPrice, time: nowIso() }];
-  saveTradeLog({ id:id, status:'ACTIVE', entries: entries, executedSize: size, entryTimestamp: t.entryTimestamp || nowIso() },
-    'Executed · ' + size + ' @ ' + t.entryPrice).then(function(){
+  apiUpdateTrade({ id:id, status:'ACTIVE', entries: entries, executedSize: size, entryTimestamp: t.entryTimestamp || nowIso() }).then(function(){
     toast('Marked ACTIVE', 'ok'); HOLD_TAB = 'ACTIVE'; _afterMutation(); renderHoldings();
   }).catch(function(e){ toast('Failed: ' + e.message, 'err'); });
 }
@@ -204,10 +171,8 @@ function confirmAdd(id) {
   var price = parseFloat(document.getElementById('add-price').value);
   if (!isFinite(size) || size<=0 || !isFinite(price)) { toast('Enter size & price','err'); return; }
   var entries = (t.entries&&t.entries.length?t.entries.slice():tradeEntries(t).slice());
-  var addNote = document.getElementById('add-note').value.trim();
-  entries.push({ size:size, price:price, time:nowIso(), note:addNote });
-  saveTradeLog({ id:id, entries:entries, status:'ACTIVE' },
-    'Added ' + size + ' @ ' + price + (addNote?' · '+addNote:'')).then(function(){
+  entries.push({ size:size, price:price, time:nowIso(), note:document.getElementById('add-note').value.trim() });
+  apiUpdateTrade({ id:id, entries:entries, status:'ACTIVE' }).then(function(){
     closeModal(); toast('Added to position','ok'); _afterMutation(); renderHoldings();
   }).catch(function(e){ toast('Failed: '+e.message,'err'); });
 }
@@ -254,8 +219,7 @@ function confirmPartial() {
   if (!isFinite(size) || size<=0 || !isFinite(price)) { toast('Enter size & price','err'); return; }
   if (size > openSz + 1e-6) { toast('Size exceeds open position','err'); return; }
   var exits = (t.exits&&t.exits.length?t.exits.slice():tradeExits(t).filter(function(){return false;}));
-  var pnote = document.getElementById('p-note').value.trim();
-  exits.push({ size:size, price:price, time:nowIso(), note:pnote });
+  exits.push({ size:size, price:price, time:nowIso(), note:document.getElementById('p-note').value.trim() });
   var remaining = round(openSz - size, 6);
   var patch = { id:_partial.id, exits:exits, exitTimestamp: nowIso() };
   if (remaining <= 1e-6) {
@@ -268,107 +232,12 @@ function confirmPartial() {
   } else {
     patch.status = 'PARTIAL';
   }
-  var logTxt = 'Took partial ' + size + ' @ ' + price + (pnote?' · '+pnote:'') + (remaining<=1e-6 ? ' · position CLOSED' : ' · ' + remaining + ' left');
-  saveTradeLog(patch, logTxt).then(function(){
+  apiUpdateTrade(patch).then(function(){
     closeModal();
     toast(remaining<=1e-6 ? 'Trade closed' : 'Partial booked', 'ok');
     HOLD_TAB = remaining<=1e-6 ? 'CLOSED TODAY' : 'ACTIVE';
     _afterMutation(); renderHoldings();
   }).catch(function(e){ toast('Failed: '+e.message,'err'); });
-}
-
-/* ── EDIT FILLS (fix wrong price / size / mistaken close) ──
-   Works from Journal and Holdings. Editable list of every entry (IN)
-   and exit (OUT) leg; recomputes status/PnL. Reducing exits below the
-   entry size re-opens the trade (CLOSED → PARTIAL/ACTIVE).            */
-var _editFills = null;
-var _editFillsRerender = null;
-
-function openEditFillsModal(id, rerender) {
-  var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
-  _editFillsRerender = rerender || function(){ _afterMutation(); };
-  _editFills = {
-    id: id,
-    entries: tradeEntries(t).map(function(f){ return { size:f.size, price:f.price, time:f.time||null, note:f.note||'' }; }),
-    exits:   tradeExits(t).map(function(f){ return { size:f.size, price:f.price, time:f.time||null, note:f.note||'' }; })
-  };
-  openModal({
-    title: 'Edit trade · ' + escapeHtml(t.ticker),
-    body: editFillsBody(),
-    footer: '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>' +
-            '<button class="btn btn-gold" onclick="confirmEditFills()">Save changes</button>'
-  });
-}
-function efCleanFill(f){ return { size:parseFloat(f.size)||0, price:parseFloat(f.price)||0, time:f.time||nowIso(), note:f.note||'' }; }
-function efArr(kind){ return _editFills[kind==='in'?'entries':'exits']; }
-function efSet(kind,i,k,v){ efArr(kind)[i][k]=v; efPaintSum(); }
-function efAdd(kind){ efArr(kind).push({ size:'', price:'', time:nowIso(), note:'' }); efPaintWrap(); }
-function efDel(kind,i){ efArr(kind).splice(i,1); efPaintWrap(); }
-function efPaintWrap(){ var w=document.getElementById('ef-wrap'); if(w) w.outerHTML=editFillsBody(); }
-function efPaintSum(){ var s=document.getElementById('ef-sum'); if(s) s.outerHTML=efSummaryHtml(); }
-
-function efSection(kind, arr, color, label, addLabel) {
-  var rows = arr.map(function(f,i){
-    return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">' +
-      '<input class="fi" style="flex:1;min-width:0" data-k="size" value="' + (f.size!=null?f.size:'') + '" placeholder="size" oninput="efSet(\'' + kind + '\',' + i + ',\'size\',this.value)">' +
-      '<span style="color:var(--muted);font-size:12px">@</span>' +
-      '<input class="fi" style="flex:1;min-width:0" data-k="price" value="' + (f.price!=null?f.price:'') + '" placeholder="price" oninput="efSet(\'' + kind + '\',' + i + ',\'price\',this.value)">' +
-      '<button class="btn btn-ghost btn-sm" title="Remove" onclick="efDel(\'' + kind + '\',' + i + ')">✕</button>' +
-    '</div>';
-  }).join('') || '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">— none —</div>';
-  return '<div class="fl" style="margin:10px 0 5px;color:' + color + '">' + label + '</div>' + rows +
-    '<button class="btn btn-ghost btn-sm" onclick="efAdd(\'' + kind + '\')">+ ' + addLabel + '</button>';
-}
-function efSummaryHtml() {
-  var t = TRADES.find(function(x){ return x.id===_editFills.id; });
-  var acc = getAccount(t.accountId), cur = acc?acc.currency:'USD';
-  var meta = assetClassMeta(assetClassOf(t)), unit = meta.unit.toLowerCase();
-  var totIn = efArr('in').reduce(function(s,f){ return s+(parseFloat(f.size)||0); }, 0);
-  var totOut = efArr('out').reduce(function(s,f){ return s+(parseFloat(f.size)||0); }, 0);
-  var st = totOut<=1e-6 ? 'ACTIVE' : (totOut < totIn-1e-6 ? 'PARTIAL' : 'CLOSED');
-  var tmp = Object.assign({}, t, { entries: efArr('in').map(efCleanFill), exits: efArr('out').map(efCleanFill) });
-  var pnl = totOut>0 ? tradeRealizedPnL(tmp) : null;
-  return '<div id="ef-sum" class="cout" style="grid-template-columns:1fr 1fr 1fr;margin:12px 0 0">' +
-    '<div class="oi"><div class="ol">New status</div><div class="ov">' + st + '</div></div>' +
-    '<div class="oi"><div class="ol">Open ' + unit + '</div><div class="ov">' + fmtN(round(totIn-totOut,4)) + '</div></div>' +
-    '<div class="oi"><div class="ol">Realized PnL</div><div class="ov ' + pnlClass(pnl) + '">' + (pnl==null?'—':moneySigned(pnl,cur)) + '</div></div>' +
-  '</div>';
-}
-function editFillsBody() {
-  return '<div id="ef-wrap">' +
-    '<div class="isolation-note" style="margin-bottom:2px">Fix a wrong price or size. Reducing exits below your entry size re-opens the trade.</div>' +
-    efSection('in',  efArr('in'),  'var(--green)', 'Entries (IN)', 'Add entry') +
-    efSection('out', efArr('out'), 'var(--red)',   'Exits (OUT)',  'Add exit') +
-    efSummaryHtml() +
-  '</div>';
-}
-function confirmEditFills() {
-  var t = TRADES.find(function(x){ return x.id===_editFills.id; }); if (!t) return;
-  var entries = efArr('in').map(efCleanFill).filter(function(f){ return f.size>0 && isFinite(f.price) && f.price>0; });
-  var exits   = efArr('out').map(efCleanFill).filter(function(f){ return f.size>0 && isFinite(f.price) && f.price>0; });
-  if (!entries.length) { toast('Need at least one entry fill (size & price)','err'); return; }
-  var totIn = entries.reduce(function(s,f){ return s+f.size; }, 0);
-  var totOut = exits.reduce(function(s,f){ return s+f.size; }, 0);
-  if (totOut > totIn + 1e-6) { toast('Exits exceed entries — reduce exit size','err'); return; }
-  var status = totOut<=1e-6 ? 'ACTIVE' : (totOut < totIn-1e-6 ? 'PARTIAL' : 'CLOSED');
-  var patch = { id:t.id, entries:entries, exits:exits, status:status, executedSize:round(totIn,6) };
-  var tmp = Object.assign({}, t, { entries:entries, exits:exits });
-  if (status === 'CLOSED') {
-    patch.exitPrice = exits[exits.length-1].price;
-    patch.exitTimestamp = t.exitTimestamp || nowIso();
-    patch.realizedPnL = tradeRealizedPnL(tmp);
-    patch.realizedR = (patch.realizedPnL!=null && tradePlannedRisk(tmp)) ? round(patch.realizedPnL/tradePlannedRisk(tmp),2) : null;
-  } else {
-    patch.exitPrice = null; patch.realizedPnL = null; patch.realizedR = null;
-    if (!exits.length) patch.exitTimestamp = null;
-  }
-  saveTradeLog(patch, 'Edited fills · ' + entries.length + ' in / ' + exits.length + ' out · now ' + status)
-    .then(function(){
-      closeModal();
-      toast(status==='CLOSED' ? 'Trade updated' : 'Trade re-opened → Holdings', 'ok');
-      _afterMutation();
-      if (_editFillsRerender) _editFillsRerender();
-    }).catch(function(e){ toast('Failed: ' + e.message, 'err'); });
 }
 
 /* ── MOVE STOP ── */
@@ -386,7 +255,7 @@ function openStopModal(id) {
 function confirmStop(id) {
   var sl = parseFloat(document.getElementById('s-sl').value);
   if (!isFinite(sl)) { toast('Enter a stop price','err'); return; }
-  saveTradeLog({ id:id, stopLossPrice:sl }, 'Moved stop to ' + sl).then(function(){ closeModal(); toast('Stop moved','ok'); _afterMutation(); renderHoldings(); });
+  apiUpdateTrade({ id:id, stopLossPrice:sl }).then(function(){ closeModal(); toast('Stop moved','ok'); _afterMutation(); renderHoldings(); });
 }
 
 /* ── CLOSE ALL ── */
@@ -431,11 +300,9 @@ function confirmClose() {
   exits.push({ size: tradeOpenSize(t), price: exit, time: nowIso(), note:'close all' });
   var tmp = Object.assign({}, t, { exits: exits });
   var pnl = tradeRealizedPnL(tmp), risk = tradePlannedRisk(tmp);
-  var rMult = pnl!=null&&risk?round(pnl/risk,2):null;
-  saveTradeLog({ id:t.id, status:'CLOSED', exits:exits, exitPrice:exit, exitTimestamp:nowIso(),
-    realizedPnL: pnl, realizedR: rMult },
-    'Closed all @ ' + exit + ' · ' + rStr(rMult) + ' · PnL ' + moneySigned(pnl, (getAccount(t.accountId)||{}).currency||'USD')).then(function(){
-    closeModal(); toast('Trade closed · ' + rStr(rMult), 'ok');
+  apiUpdateTrade({ id:t.id, status:'CLOSED', exits:exits, exitPrice:exit, exitTimestamp:nowIso(),
+    realizedPnL: pnl, realizedR: pnl!=null&&risk?round(pnl/risk,2):null }).then(function(){
+    closeModal(); toast('Trade closed · ' + rStr(pnl!=null&&risk?round(pnl/risk,2):null), 'ok');
     HOLD_TAB='CLOSED TODAY'; _afterMutation(); renderHoldings();
   }).catch(function(e){ toast('Failed: '+e.message,'err'); });
 }

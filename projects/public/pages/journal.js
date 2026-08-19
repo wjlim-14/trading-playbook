@@ -280,7 +280,12 @@ function journalDetail(t) {
       '<button class="btn btn-gold btn-full" style="margin-top:10px" onclick="markReviewed(\'' + t.id + '\')">✓ ' + (t.reviewComplete?'Save changes & lock':'Mark as Reviewed') + '</button>';
   }
 
-  return charts + reasonsBlock + GRADE_LEGEND + body + tradeLogHtml(t);
+  var editTradeBar =
+    '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">' +
+      '<button class="btn btn-ghost btn-sm" onclick="openEditFillsModal(\'' + t.id + '\', renderJournal)">✎ Edit trade (fix price / size)</button>' +
+    '</div>';
+
+  return editTradeBar + charts + reasonsBlock + GRADE_LEGEND + body + tradeLogHtml(t);
 }
 
 /* ── ACTIONS ── */
