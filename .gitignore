@@ -1,4 +1,7 @@
-.env
-CLAUDE.local.md
-.claude/settings.local.json
+# build/staging artifacts
+_*.zip
+_*.txt
+_stage_*/
+_to_delete/
 node_modules/
+.DS_Store
