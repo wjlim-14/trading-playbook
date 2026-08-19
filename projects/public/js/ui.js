@@ -131,3 +131,106 @@ function chartSlotHtml(url, label, slotId) {
     '<div class="cthumb-icon">📈</div><div class="cthumb-cap">' + label + ' · Ctrl+V</div></div>' +
     '<div class="cslot-label">' + label + '</div></div>';
 }
+
+/* ── FLEXIBLE CHART SCREENSHOTS (tagged by timeframe) ──
+   shotsGridHtml renders a trade's pre/post screenshots as a grid: each shot
+   shows the image + an editable timeframe tag + remove; an "add" tile lets
+   you paste/upload more. wireShotSlots wires paste/upload/remove/tf-change
+   and the High/Low timeframe pickers. */
+function tfSelectHtml(dataAttr, val) {
+  var opts = TF_OPTIONS.map(function(o){ return '<option value="' + o + '"' + (o===val?' selected':'') + '>' + o + '</option>'; }).join('');
+  return '<select class="fi shot-tf" ' + dataAttr + '>' + opts + '</select>';
+}
+function tfPickerRow(t) {
+  return '<div class="tf-pick">' +
+    '<span class="fl" style="margin:0">Timeframes</span>' +
+    '<label class="tf-lab">High' + tfSelectHtml('data-tfset="' + t.id + '|tfHigh"', tradeTfHigh(t)) + '</label>' +
+    '<label class="tf-lab">Low' + tfSelectHtml('data-tfset="' + t.id + '|tfLow"', tradeTfLow(t)) + '</label>' +
+  '</div>';
+}
+function shotsGridHtml(t, stage, editable) {
+  var shots = stage==='pre' ? tradePreShots(t) : tradePostShots(t);
+  var cells = shots.map(function(s, i){
+    var tag = editable
+      ? tfSelectHtml('data-shottf="' + t.id + '|' + stage + '|' + i + '"', s.tf||'')
+      : '<span class="shot-tflabel">' + escapeHtml(s.tf||'—') + '</span>';
+    return '<div class="cslot">' +
+      '<div class="cthumb filled shotcell" data-shotview="' + t.id + '|' + stage + '|' + i + '">' +
+        '<img src="' + escapeHtml(s.url) + '" alt="chart">' +
+        (editable ? '<button class="rm" data-shotrm="' + t.id + '|' + stage + '|' + i + '">remove</button>' : '') +
+      '</div><div class="shot-meta">' + tag + '</div></div>';
+  }).join('');
+  var add = editable
+    ? '<div class="cslot"><div class="cthumb addshot" data-addshot="' + t.id + '|' + stage + '" tabindex="0">' +
+        '<div class="cthumb-icon">＋</div><div class="cthumb-cap">Add · Ctrl+V</div></div>' +
+        '<div class="shot-meta" style="opacity:.55;font-size:9px">paste or click</div></div>'
+    : '';
+  var inner = cells + add;
+  if (!inner) inner = '<div class="empty" style="grid-column:1/-1;font-size:11px;padding:8px">No screenshots.</div>';
+  return '<div class="shotgrid">' + inner + '</div>';
+}
+function viewShot(url) {
+  openModal({ title:'Chart', body:'<img src="' + escapeHtml(url) + '" style="width:100%;border-radius:6px;display:block">',
+    footer:'<button class="btn btn-ghost" onclick="closeModal()">Close</button>' });
+}
+
+/* Persist mutations (works in demo + live via apiUpdateTrade). */
+function _shotField(stage){ return stage==='pre' ? 'preShots' : 'postShots'; }
+function _shotArr(t, stage){ return (stage==='pre' ? tradePreShots(t) : tradePostShots(t)).slice(); }
+function addShot(id, stage, url) {
+  var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return Promise.resolve();
+  var arr = _shotArr(t, stage);
+  arr.push({ url:url, tf: tradeTfHigh(t), note:'' });
+  var p = { id:id }; p[_shotField(stage)] = arr;
+  return apiUpdateTrade(p);
+}
+function removeShot(id, stage, idx, onDone) {
+  var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
+  var arr = _shotArr(t, stage); arr.splice(idx,1);
+  var p = { id:id }; p[_shotField(stage)] = arr;
+  apiUpdateTrade(p).then(function(){ if (onDone) onDone(); });
+}
+function setShotTf(id, stage, idx, tf, onDone) {
+  var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
+  var arr = _shotArr(t, stage); if (!arr[idx]) return; arr[idx].tf = tf;
+  var p = { id:id }; p[_shotField(stage)] = arr;
+  apiUpdateTrade(p).then(function(){ if (onDone) onDone(); });
+}
+function wireShotSlots(root, onDone) {
+  if (!root) return;
+  root.querySelectorAll('.cthumb[data-addshot]').forEach(function(el){
+    var parts = el.getAttribute('data-addshot').split('|');
+    var id = parts[0], stage = parts[1];
+    var cb = function(url){ addShot(id, stage, url).then(function(){ if (onDone) onDone(); }); };
+    wireChartSlot(el, cb);
+    el.addEventListener('mouseenter', function(){ _activeSlotCb = cb; });
+    el.addEventListener('focus', function(){ _activeSlotCb = cb; });
+  });
+  root.querySelectorAll('[data-shotrm]').forEach(function(btn){
+    btn.addEventListener('click', function(e){ e.stopPropagation();
+      var p = btn.getAttribute('data-shotrm').split('|'); removeShot(p[0], p[1], +p[2], onDone);
+    });
+  });
+  root.querySelectorAll('[data-shottf]').forEach(function(sel){
+    sel.addEventListener('click', function(e){ e.stopPropagation(); });
+    sel.addEventListener('change', function(){
+      var p = sel.getAttribute('data-shottf').split('|'); setShotTf(p[0], p[1], +p[2], sel.value, onDone);
+    });
+  });
+  root.querySelectorAll('[data-shotview]').forEach(function(el){
+    el.addEventListener('click', function(){
+      var p = el.getAttribute('data-shotview').split('|');
+      var t = TRADES.find(function(x){ return x.id===p[0]; }); if (!t) return;
+      var arr = p[1]==='pre' ? tradePreShots(t) : tradePostShots(t);
+      var s = arr[+p[2]]; if (s) viewShot(s.url);
+    });
+  });
+  root.querySelectorAll('[data-tfset]').forEach(function(sel){
+    sel.addEventListener('click', function(e){ e.stopPropagation(); });
+    sel.addEventListener('change', function(){
+      var p = sel.getAttribute('data-tfset').split('|');
+      var patch = { id:p[0] }; patch[p[1]] = sel.value;
+      apiUpdateTrade(patch).then(function(){ if (onDone) onDone(); });
+    });
+  });
+}

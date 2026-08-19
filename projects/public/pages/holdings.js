@@ -41,6 +41,7 @@ function renderHoldings() {
     '<div class="tlist">' + rows + '</div>';
 
   wireTradeSlots(el, function(){ _afterMutation(); renderHoldings(); });
+  wireShotSlots(el, function(){ _afterMutation(); renderHoldings(); });
 }
 
 function perAccountHeatRow() {
@@ -100,10 +101,9 @@ function holdingRow(t) {
 function holdingDetail(t, st) {
   var reasons = (t.entryReasonTags||[]).map(function(r){ return '<span class="ptag sel">' + escapeHtml(r) + '</span>'; }).join('');
   var charts =
-    '<div class="cpair">' +
-      chartSlotHtml(t.preChartUrl4H, '4H Big TF', t.id + '|preChartUrl4H') +
-      chartSlotHtml(t.preChartUrl1H, '1H Entry TF', t.id + '|preChartUrl1H') +
-    '</div>';
+    tfPickerRow(t) +
+    '<div class="fl" style="margin:2px 0 5px">Pre-Trade Charts</div>' +
+    shotsGridHtml(t, 'pre', true);
 
   var fills = fillsHistory(t);
 

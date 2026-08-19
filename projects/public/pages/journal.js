@@ -37,7 +37,10 @@ function renderJournal() {
     content;
 
   if (JVIEW === 'trades') jRenderList();
-  else if (JVIEW === 'week') wireTradeSlots(el, function(){ _afterMutation(); renderJournal(); });
+  else if (JVIEW === 'week') {
+    wireTradeSlots(el, function(){ _afterMutation(); renderJournal(); });
+    wireShotSlots(el, function(){ _afterMutation(); renderJournal(); });
+  }
 }
 
 /* ── DISCIPLINE STRIP (always on top) ── */
@@ -107,6 +110,7 @@ function jRenderList() {
   var rows = jFilteredTrades().map(journalRow).join('');
   list.innerHTML = rows || '<div class="empty">No closed trades match.' + (MODE==='BACKTEST'?' (Backtest)':'') + '</div>';
   wireTradeSlots(list, function(){ _afterMutation(); renderJournal(); });
+  wireShotSlots(list, function(){ _afterMutation(); renderJournal(); });
 }
 
 /* filters */
@@ -238,15 +242,7 @@ var GRADE_LEGEND =
 
 function journalDetail(t) {
   var locked = t.reviewComplete && !_jediting[t.id];
-  var charts =
-    '<div class="cpair">' +
-      chartSlotHtml(t.preChartUrl4H, '4H Pre-Trade', t.id + '|preChartUrl4H') +
-      chartSlotHtml(t.preChartUrl1H, '1H Pre-Trade', t.id + '|preChartUrl1H') +
-    '</div>' +
-    '<div class="cpair">' +
-      chartSlotHtml(t.postChartUrl4H, '4H Post-Exit', t.id + '|postChartUrl4H') +
-      chartSlotHtml(t.postChartUrl1H, '1H Post-Exit', t.id + '|postChartUrl1H') +
-    '</div>';
+  var acc = getAccount(t.accountId); var cur = acc?acc.currency:'USD';
   var reasons = (t.entryReasonTags||[]).map(function(r){ return '<span class="ptag sel">' + escapeHtml(r) + '</span>'; }).join('');
   var reasonsBlock = reasons ? '<div class="fl" style="margin:10px 0 4px">Entry Reasons</div><div class="ptags">' + reasons + '</div>' : '';
 
@@ -280,12 +276,40 @@ function journalDetail(t) {
       '<button class="btn btn-gold btn-full" style="margin-top:10px" onclick="markReviewed(\'' + t.id + '\')">✓ ' + (t.reviewComplete?'Save changes & lock':'Mark as Reviewed') + '</button>';
   }
 
+  // Outcome one-liner — see the result at a glance
+  var statLine =
+    '<div class="jstat">' +
+      '<span>' + escapeHtml(t.ticker) + ' ' + escapeHtml(t.direction||'') + '</span>' +
+      '<span>Avg ' + fmtN(tradeAvgEntry(t)) + ' → Exit ' + fmtN(lastExitPrice(t)) + '</span>' +
+      '<span class="' + pnlClass(tradeR(t)) + '">' + rStr(tradeR(t)) + '</span>' +
+      '<span class="' + pnlClass(tradePnL(t)) + '">' + moneySigned(tradePnL(t),cur) + '</span>' +
+    '</div>';
+
   var editTradeBar =
     '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">' +
       '<button class="btn btn-ghost btn-sm" onclick="openEditFillsModal(\'' + t.id + '\', renderJournal)">✎ Edit trade (fix price / size)</button>' +
     '</div>';
 
-  return editTradeBar + charts + reasonsBlock + GRADE_LEGEND + body + tradeLogHtml(t);
+  // PRE-TRADE block — setup, plan, entry-side screenshots
+  var preBlock =
+    '<div class="jblock jpre">' +
+      '<div class="jblock-h">📋 PRE-TRADE <span>setup &amp; plan</span></div>' +
+      tfPickerRow(t) +
+      shotsGridHtml(t, 'pre', true) +
+      '<div style="display:flex;gap:6px;margin:2px 0 4px">' + gradePill('Entry', t.entryGrade) + '</div>' +
+      reasonsBlock +
+      (t.setupNotes ? '<div class="rfbox" style="margin-top:8px"><div class="rfl">Setup / Plan</div><div style="font-size:12px;white-space:pre-wrap">' + escapeHtml(t.setupNotes) + '</div></div>' : '') +
+    '</div>';
+
+  // POST-TRADE block — exit-side screenshots + the review (grade, tags, takeaway)
+  var postBlock =
+    '<div class="jblock jpost">' +
+      '<div class="jblock-h">🎯 POST-TRADE <span>exit &amp; review</span></div>' +
+      shotsGridHtml(t, 'post', true) +
+      body +
+    '</div>';
+
+  return editTradeBar + statLine + GRADE_LEGEND + preBlock + postBlock + tradeLogHtml(t);
 }
 
 /* ── ACTIONS ── */

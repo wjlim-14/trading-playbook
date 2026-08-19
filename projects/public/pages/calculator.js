@@ -15,7 +15,8 @@ function _calcDefaults() {
     entry: '', sl: '', riskMode: 'pct', riskPct: PREFS.defaultRiskPct || 1.0, riskDollar: '',
     rr: 3, entryGrade: 'A', mood: 'CALIBRATED', reasons: [], setupNotes: '',
     executedSize: '',  // blank = use system-calculated size
-    leverage: ''       // for margin accounts; blank = 1x
+    leverage: '',      // for margin accounts; blank = 1x
+    tfHigh: '4h', tfLow: '1h'   // chart timeframes for this trade (high + low)
   };
 }
 function ASSET_TYPE_FROM_CLASS(c){ return { MY_STOCK:'KLCI', US_STOCK:'STOCK', CRYPTO:'CRYPTO', FOREX:'FOREX' }[c] || 'STOCK'; }
@@ -102,6 +103,11 @@ function renderCalculator() {
       '<div class="fl" style="margin-bottom:8px">Entry Grade</div><div class="grow" style="margin-bottom:14px">' + gradeBtns + '</div>' +
       '<div class="fl" style="margin-bottom:8px">Pre-Trade Mindset</div><div class="mrow" style="margin-bottom:12px">' + moodBtns + '</div>' +
       '<div class="fl" style="margin-bottom:6px">Entry Reasons <span style="color:var(--red)">*required</span> <span style="color:var(--muted)">· edit in Settings</span></div><div class="rtags" style="margin-bottom:14px">' + reasonBtns + '</div>' +
+      '<div class="fl" style="margin-bottom:6px">Chart Timeframes <span style="color:var(--muted)">· High + Low (add screenshots in Holdings/Journal)</span></div>' +
+      '<div class="tf-pick" style="margin-bottom:14px">' +
+        '<label class="tf-lab">High<select class="fi shot-tf" onchange="calcSet(\'tfHigh\',this.value)">' + calcTfOpts(CALC.tfHigh) + '</select></label>' +
+        '<label class="tf-lab">Low<select class="fi shot-tf" onchange="calcSet(\'tfLow\',this.value)">' + calcTfOpts(CALC.tfLow) + '</select></label>' +
+      '</div>' +
       '<div class="rfbox" style="margin-bottom:14px"><div class="rfl">Setup Notes (optional)</div>' +
         '<textarea class="rfinp" id="c-notes" placeholder="What is the setup?" oninput="calcSet(\'setupNotes\',this.value)">' + escapeHtml(CALC.setupNotes) + '</textarea></div>' +
       '<button class="btn btn-gold btn-full" onclick="calcSaveToPlan()">💾 Save to Plan → Holdings</button>' +
@@ -110,6 +116,7 @@ function renderCalculator() {
   calcPaint();
 }
 
+function calcTfOpts(val) { return TF_OPTIONS.map(function(o){ return '<option value="' + o + '"' + (o===val?' selected':'') + '>' + o + '</option>'; }).join(''); }
 function calcSet(k, v) { CALC[k] = v; }
 function calcSetDir(d) { CALC.direction = d; renderCalculator(); }
 function calcSetRM(m) { CALC.riskMode = m; renderCalculator(); }
@@ -198,6 +205,8 @@ function calcSaveToPlan() {
     preTradeMood: CALC.mood,
     entryReasonTags: CALC.reasons.slice(),
     setupNotes: CALC.setupNotes,
+    tfHigh: CALC.tfHigh, tfLow: CALC.tfLow,
+    preShots: [], postShots: [],
     entries: [],
     exits: [],
     entryTimestamp: nowIso(),

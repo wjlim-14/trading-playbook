@@ -216,6 +216,28 @@ function tradeVPP(t, price) {
 }
 function dirSign(t) { return t.direction === 'SHORT' ? -1 : 1; }
 
+/* ── TIMEFRAMES & CHART SCREENSHOTS ──
+   Each trade picks a High + Low timeframe. Screenshots are flexible arrays
+   {url, tf, note} for pre-trade (setup) and post-trade (review). Old fixed
+   fields (preChartUrl4H/1H, postChartUrl4H/1H) migrate in on read. */
+var TF_OPTIONS = ['1m','5m','10m','15m','30m','45m','1h','4h','D','W','M'];
+function tradeTfHigh(t) { return t.tfHigh || '4h'; }
+function tradeTfLow(t)  { return t.tfLow  || '1h'; }
+function tradePreShots(t) {
+  if (t.preShots && t.preShots.length) return t.preShots;
+  var out = [];
+  if (t.preChartUrl4H) out.push({ url:t.preChartUrl4H, tf:'4h', note:'' });
+  if (t.preChartUrl1H) out.push({ url:t.preChartUrl1H, tf:'1h', note:'' });
+  return out;
+}
+function tradePostShots(t) {
+  if (t.postShots && t.postShots.length) return t.postShots;
+  var out = [];
+  if (t.postChartUrl4H) out.push({ url:t.postChartUrl4H, tf:'4h', note:'' });
+  if (t.postChartUrl1H) out.push({ url:t.postChartUrl1H, tf:'1h', note:'' });
+  return out;
+}
+
 function tradeEntries(t) {
   if (t.entries && t.entries.length) return t.entries;
   if (t.entryPrice != null) return [{ size: (t.executedSize != null ? t.executedSize : t.positionSize) || 0, price: t.entryPrice }];

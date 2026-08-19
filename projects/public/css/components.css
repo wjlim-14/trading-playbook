@@ -79,8 +79,28 @@
 .cthumb-icon{font-size:20px;opacity:.4;}
 .cthumb-cap{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
 .cslot-label{font-size:9px;color:var(--muted);text-align:center;text-transform:uppercase;}
-.cthumb .rm{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:3px;font-size:10px;padding:1px 5px;display:none;}
+.cthumb .rm{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:3px;font-size:10px;padding:1px 5px;display:none;cursor:pointer;}
 .cthumb.filled:hover .rm{display:block;}
+/* ── flexible tagged screenshots ── */
+.shotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin-bottom:12px;}
+.shotcell{cursor:zoom-in;}
+.cthumb.addshot{border-style:dashed;cursor:pointer;}
+.cthumb.addshot .cthumb-icon{opacity:.5;}
+.shot-meta{display:flex;justify-content:center;margin-top:3px;}
+.shot-tf{height:22px;padding:0 4px;font-size:10px;max-width:70px;text-align:center;}
+.shot-tflabel{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border:1px solid var(--border);border-radius:3px;padding:1px 7px;background:var(--surface2);}
+.tf-pick{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+.tf-lab{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+.tf-lab .shot-tf{max-width:64px;}
+/* ── pre/post review blocks ── */
+.jblock{border:1px solid var(--border);border-radius:7px;padding:12px;margin-bottom:12px;background:var(--surface);}
+.jblock.jpre{border-left:3px solid var(--gold);}
+.jblock.jpost{border-left:3px solid var(--blue);}
+.jblock-h{font-size:12px;font-weight:700;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:baseline;gap:8px;}
+.jblock-h span{font-size:10px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;}
+.jstat{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-family:var(--mono);font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:10px;}
+.jstat span{white-space:nowrap;}
+.jstat span:first-child{font-weight:700;}
 
 .ptags{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;}
 .ptag{padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--border2);color:var(--text2);cursor:pointer;background:transparent;transition:all .15s;}
