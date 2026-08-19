@@ -32,14 +32,27 @@ function renderHoldings() {
   el.innerHTML =
     (MODE==='BACKTEST' ? '<div class="mock-banner"><span style="font-size:15px">🧪</span><div><strong>Backtest Mode</strong> — simulated positions.</div></div>' : '') +
     '<div class="heat-banner' + (over?' over':'') + '">' +
-      '<div style="display:flex;align-items:center;gap:8px"><div class="dot"></div><span style="font-weight:500">Portfolio Heat</span>' +
-        '<span style="font-family:var(--mono);font-weight:700;color:' + (over?'var(--red)':'var(--amber)') + '">' + money(heat.risk,'USD') + ' (' + heat.pct + '%) open risk</span></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div class="dot"></div><span style="font-weight:500">Portfolio Heat</span>' +
+        '<span style="font-family:var(--mono);font-weight:700;color:' + (over?'var(--red)':'var(--amber)') + '">' + money(heat.risk,heat.currency) + ' (' + heat.pct + '%) open risk' + (ACTIVE_ACCOUNT==='all'?' ≈'+heat.currency:'') + '</span></div>' +
       '<span style="font-size:10px;color:var(--muted)">Limit: ' + heat.limit + '%</span>' +
-    '</div>' + dupHtml +
+    '</div>' +
+    (ACTIVE_ACCOUNT==='all' ? perAccountHeatRow() : '') + dupHtml +
     '<div class="stabs">' + tabs + '</div>' +
     '<div class="tlist">' + rows + '</div>';
 
   wireTradeSlots(el, function(){ _afterMutation(); renderHoldings(); });
+}
+
+function perAccountHeatRow() {
+  var rows = perAccountHeat();
+  if (!rows.length) return '';
+  var chips = rows.map(function(r){
+    var over = r.pct > (PREFS.dailyLimitPct||6);
+    return '<span style="display:inline-flex;gap:6px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 11px;font-size:11px">' +
+      '<span style="font-weight:600">' + escapeHtml(r.account.name.split(' ')[0]) + '</span>' +
+      '<span style="font-family:var(--mono);color:' + (over?'var(--red)':'var(--amber)') + '">' + money(r.risk,r.currency) + ' (' + r.pct + '%)</span></span>';
+  }).join('');
+  return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">' + chips + '</div>';
 }
 
 function setHoldTab(t) { HOLD_TAB = t; renderHoldings(); }

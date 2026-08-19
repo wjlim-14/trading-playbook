@@ -14,7 +14,8 @@ function _calcDefaults() {
     accountId: acc, ticker: '', direction: 'LONG',
     entry: '', sl: '', riskMode: 'pct', riskPct: PREFS.defaultRiskPct || 1.0, riskDollar: '',
     rr: 3, entryGrade: 'A', mood: 'CALIBRATED', reasons: [], setupNotes: '',
-    executedSize: ''   // blank = use system-calculated size
+    executedSize: '',  // blank = use system-calculated size
+    leverage: ''       // for margin accounts; blank = 1x
   };
 }
 function ASSET_TYPE_FROM_CLASS(c){ return { MY_STOCK:'KLCI', US_STOCK:'STOCK', CRYPTO:'CRYPTO', FOREX:'FOREX' }[c] || 'STOCK'; }
@@ -92,6 +93,11 @@ function renderCalculator() {
       '<div class="cg2" style="margin-bottom:4px"><div class="fg"><div class="fl">Executed Size <span style="color:var(--muted)">(edit if you de-risk / add risk)</span></div>' +
         '<input class="fi" id="c-exec" value="' + CALC.executedSize + '" placeholder="auto = system size" oninput="calcSet(\'executedSize\',this.value);calcPaint()"></div>' +
         '<div class="fg"><div class="fl">Actual Risk at Executed Size</div><div class="fi" id="c-actrisk" style="display:flex;align-items:center;background:var(--surface2)">—</div></div></div>' +
+      (isMarginAccount(account)
+        ? '<div class="cg2" style="margin-bottom:4px"><div class="fg"><div class="fl">Leverage (margin account)</div>' +
+            '<input class="fi" id="c-lev" value="' + CALC.leverage + '" placeholder="e.g. 10" oninput="calcSet(\'leverage\',this.value);calcPaint()"></div>' +
+            '<div class="fg"><div class="fl">Notional · Margin Required</div><div class="fi" id="c-margin" style="display:flex;align-items:center;background:var(--surface2)">—</div></div></div>'
+        : '<div class="fg" style="margin-bottom:4px"><div class="fl">Position Cost (notional)</div><div class="fi" id="c-margin" style="max-width:260px;display:flex;align-items:center;background:var(--surface2)">—</div></div>') +
       '<div class="divider"></div>' +
       '<div class="fl" style="margin-bottom:8px">Entry Grade</div><div class="grow" style="margin-bottom:14px">' + gradeBtns + '</div>' +
       '<div class="fl" style="margin-bottom:8px">Pre-Trade Mindset</div><div class="mrow" style="margin-bottom:12px">' + moodBtns + '</div>' +
@@ -129,8 +135,12 @@ function calcCompute() {
   var execSize = CALC.executedSize !== '' && isFinite(parseFloat(CALC.executedSize)) ? parseFloat(CALC.executedSize) : ps.size;
   var vpp = valuePerPoint(assetClass, CALC.ticker, entry);
   var actualRisk = (isFinite(entry)&&isFinite(sl)) ? Math.abs(entry-sl)*execSize*vpp : 0;
+  var lev = parseFloat(CALC.leverage) || 1;
+  var notional = isFinite(entry) ? tradeNotional(assetClass, CALC.ticker, entry, execSize) : 0;
+  var margin = lev > 0 ? notional / lev : notional;
   return { account:account, assetClass:assetClass, entry:entry, sl:sl, equity:equity, riskAmt:riskAmt,
-           ps:ps, reward:reward, tp:tp, currency:account.currency, execSize:execSize, vpp:vpp, actualRisk:actualRisk };
+           ps:ps, reward:reward, tp:tp, currency:account.currency, execSize:execSize, vpp:vpp, actualRisk:actualRisk,
+           lev:lev, notional:notional, margin:margin };
 }
 
 function calcPaint() {
@@ -153,6 +163,10 @@ function calcPaint() {
   var exEl = document.getElementById('c-exec');
   if (exEl && CALC.executedSize === '' && c.ps.size) exEl.setAttribute('placeholder', 'auto = ' + c.ps.size);
   set('c-actrisk', c.actualRisk ? money(c.actualRisk, c.currency) + (c.equity?(' · '+round(c.actualRisk/c.equity*100,2)+'%'):'') : '—');
+  if (isMarginAccount(c.account))
+    set('c-margin', c.notional ? money(c.notional,c.currency) + ' · ' + money(c.margin,c.currency) + ' @ ' + c.lev + 'x' : '—');
+  else
+    set('c-margin', c.notional ? money(c.notional,c.currency) : '—');
 }
 
 function calcSaveToPlan() {

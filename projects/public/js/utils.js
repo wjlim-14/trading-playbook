@@ -7,8 +7,24 @@
 function round(n, d) { return +Number(n).toFixed(d == null ? 2 : d); }
 
 /* ── CURRENCY ── */
-var CURRENCY_SYMBOL = { USD:'$', USDT:'$', MYR:'RM', SGD:'S$', EUR:'€', GBP:'£', JPY:'¥', AUD:'A$' };
+var CURRENCY_SYMBOL = { USD:'$', USDT:'$', MYR:'RM', SGD:'S$', EUR:'€', GBP:'£', JPY:'¥', AUD:'A$', HKD:'HK$' };
 function curSym(c) { return CURRENCY_SYMBOL[c] || (c ? c + ' ' : '$'); }
+
+/* ── FX / REPORTING CURRENCY ──
+   Rates are "1 unit of <currency> = X USD" (USD-anchored). The consolidated
+   figure converts every account into the chosen base currency. All editable
+   in Settings; sensible defaults below. */
+var DEFAULT_FX = { USD:1, USDT:1, MYR:0.21, SGD:0.74, EUR:1.08, GBP:1.27, AUD:0.66, JPY:0.0064, HKD:0.128 };
+function baseCurrency() { return (PREFS && PREFS.baseCurrency) || 'USD'; }
+function fxRates() { return Object.assign({}, DEFAULT_FX, (PREFS && PREFS.fxRates) || {}); }
+function usdPer(cur) { var r = fxRates(); return r[cur] != null ? r[cur] : 1; }
+/* convert an amount in <cur> into the reporting base currency */
+function toBase(amount, cur) {
+  var r = fxRates();
+  var usd = (amount || 0) * usdPer(cur);
+  var baseUsd = r[baseCurrency()] || 1;
+  return usd / baseUsd;
+}
 
 /* ── ACCOUNTS ── */
 function getAccount(id) { return ACCOUNTS.find(function(a){ return a.id === id; }); }
@@ -42,6 +58,32 @@ function accountBalance(accountId) {
 
 /* Equity used for position sizing (the live balance of the selected account). */
 function accountEquity(accountId) { return accountBalance(accountId); }
+
+/* Account balance converted to the reporting base currency. */
+function accountBalanceBase(accountId) {
+  var a = getAccount(accountId); if (!a) return 0;
+  return toBase(accountBalance(accountId), a.currency);
+}
+/* Consolidated balance across the current env's accounts, in base currency. */
+function consolidatedBalanceBase() {
+  return activeAccounts().filter(function(a){ return (a.env||'LIVE')===MODE; })
+    .reduce(function(s,a){ return s + accountBalanceBase(a.id); }, 0);
+}
+/* Open risk ($ in the account's own currency) for one account, current mode. */
+function accountOpenRisk(accountId) {
+  return TRADES.filter(function(t){
+    var s = tradeStatus(t);
+    return t.accountId === accountId && t.mode === MODE && (s === 'ACTIVE' || s === 'PARTIAL');
+  }).reduce(function(sum, t){ return sum + tradeOpenRisk(t); }, 0);
+}
+/* Per-account heat rows for the current env. */
+function perAccountHeat() {
+  return activeAccounts().filter(function(a){ return (a.env||'LIVE')===MODE; }).map(function(a){
+    var risk = accountOpenRisk(a.id);
+    var eq = accountBalance(a.id);
+    return { account:a, risk:round(risk,2), pct: eq>0 ? round(risk/eq*100,1) : 0, currency:a.currency };
+  }).filter(function(r){ return r.risk > 0; });
+}
 
 /* ── ASSET CLASSES ──
    Account-level asset class drives sizing. Sizes are stored in the natural
@@ -335,18 +377,28 @@ function gradeMatrix(trades) {
 
 /* ── PORTFOLIO HEAT (open risk across ACTIVE trades) ── */
 function portfolioHeat() {
-  var actives = activeTrades();
-  var risk = actives.reduce(function(s,t){ return s + tradeOpenRisk(t); }, 0);
-  var equityBase;
+  var limit = PREFS.dailyLimitPct || 6;
   if (ACTIVE_ACCOUNT === 'all') {
-    equityBase = activeAccounts().filter(function(a){ return (a.env||'LIVE')===MODE; })
-      .reduce(function(s,a){ return s + accountBalance(a.id); }, 0);
-  } else {
-    equityBase = accountBalance(ACTIVE_ACCOUNT);
+    // convert each account's open risk to base currency before summing
+    var risk = activeAccounts().filter(function(a){ return (a.env||'LIVE')===MODE; })
+      .reduce(function(s,a){ return s + toBase(accountOpenRisk(a.id), a.currency); }, 0);
+    var equity = consolidatedBalanceBase();
+    return { risk: round(risk,2), pct: equity>0 ? round(risk/equity*100,1) : 0, limit: limit, equity: equity, currency: baseCurrency() };
   }
-  var pct = equityBase > 0 ? round(risk / equityBase * 100, 1) : 0;
-  return { risk: round(risk,2), pct: pct, limit: PREFS.dailyLimitPct || 6, equity: equityBase };
+  var acc = getAccount(ACTIVE_ACCOUNT);
+  var r = accountOpenRisk(ACTIVE_ACCOUNT);
+  var eq = accountBalance(ACTIVE_ACCOUNT);
+  return { risk: round(r,2), pct: eq>0 ? round(r/eq*100,1) : 0, limit: limit, equity: eq, currency: acc ? acc.currency : baseCurrency() };
 }
+
+/* ── NOTIONAL & MARGIN (account-type aware) ──
+   notional = size × valuePerPoint × price  (works across asset classes:
+   stocks/crypto valuePerPoint=1 so notional=size×price; forex lots use the
+   contract value). Margin = notional ÷ leverage. */
+function tradeNotional(assetClass, ticker, price, size) {
+  return Math.abs(size) * valuePerPoint(assetClass, ticker, price) * Math.abs(price);
+}
+function isMarginAccount(a) { return a && (a.accountType === 'MARGIN' || a.assetClass === 'FOREX' || a.assetClass === 'CRYPTO'); }
 
 /* ── PENDING REVIEWS ── */
 function pendingReviews(mode) {

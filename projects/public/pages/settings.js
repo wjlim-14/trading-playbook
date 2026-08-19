@@ -22,6 +22,8 @@ function renderSettings() {
         '<div class="field"><div class="fl">Daily Portfolio Heat Limit %</div><input class="fi" id="set-limit" value="' + (PREFS.dailyLimitPct||6) + '" onchange="saveRiskDefaults()"></div>' +
       '</div></div></div>' +
 
+    fxCard() +
+
     tagEditorCard('Entry Reasons', 'entryReasons', entry, 'Used on the Calculator when planning a trade.') +
     tagEditorCard('Exit / Mistake Tags', 'exitReasons', exit, 'Used on the Journal when reviewing a closed trade.') +
 
@@ -60,6 +62,32 @@ function instrRows(instr) {
       '<div style="font-family:var(--mono);font-size:11px;flex:1">$' + v.valuePerPoint + ' / point · pip ' + v.pip + (v.label?' · '+escapeHtml(v.label):'') + (custom?'':' <span style="color:var(--muted)">(default)</span>') + '</div>' +
       (custom ? '<button class="modal-x" style="font-size:16px" onclick="removeInstrument(\'' + k + '\')" title="Reset">&times;</button>' : '') + '</div>';
   }).join('');
+}
+
+function fxCard() {
+  var base = baseCurrency();
+  var rates = fxRates();
+  var curList = ['USD','MYR','SGD','USDT','EUR','GBP','AUD','JPY','HKD'];
+  var baseOpts = curList.map(function(c){ return '<option value="'+c+'"'+(base===c?' selected':'')+'>'+c+'</option>'; }).join('');
+  var rows = Object.keys(rates).sort().map(function(c){
+    return '<div class="tx-row"><div style="font-family:var(--mono);font-weight:700;width:70px">'+c+'</div>' +
+      '<div style="flex:1;font-size:11px;color:var(--muted)">1 '+c+' = </div>' +
+      '<input class="fi" style="max-width:120px;font-family:var(--mono)" value="'+rates[c]+'" onchange="setFx(\''+c+'\',this.value)"> ' +
+      '<span style="font-size:11px;color:var(--muted);margin-left:6px">USD</span></div>';
+  }).join('');
+  return '<div class="card"><div class="card-h"><div class="card-t">Reporting Currency & FX Rates</div></div>' +
+    '<div class="card-b">' +
+      '<div class="cg2"><div class="field"><div class="fl">Consolidated / reporting currency</div>' +
+        '<select class="fi" onchange="setBaseCurrency(this.value)">' + baseOpts + '</select></div><div></div></div>' +
+      '<div style="font-size:11px;color:var(--muted);margin:6px 0 10px">Rates are anchored to USD (1 unit = X USD). The "All Consolidated" total converts every account into your reporting currency using these.</div>' +
+      '<div style="display:flex;flex-direction:column;gap:6px">' + rows + '</div>' +
+    '</div></div>';
+}
+function setBaseCurrency(c) { apiSavePrefs({ baseCurrency: c }).then(function(){ toast('Reporting currency: '+c,'ok'); _afterMutation(); renderSettings(); }); }
+function setFx(cur, v) {
+  var val = parseFloat(v); if (!isFinite(val) || val<=0) { toast('Enter a valid rate','err'); return; }
+  var rates = Object.assign({}, DEFAULT_FX, PREFS.fxRates || {}); rates[cur] = val;
+  apiSavePrefs({ fxRates: rates }).then(function(){ toast('Rate saved','ok'); _afterMutation(); });
 }
 
 /* ── actions ── */

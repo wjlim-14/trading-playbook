@@ -65,6 +65,8 @@ function accountCard(a) {
       ' · Trade PnL: ' + moneySigned(tradePnL,a.currency) + '<br>' +
       'Deposits: ' + moneySigned(deposits,a.currency) + ' · Withdrawals: ' + moneySigned(-withdrawals,a.currency) +
       (fees?' · Fees: ' + moneySigned(-fees,a.currency):'') + '</div>' +
+    (function(){ var rk=accountOpenRisk(a.id); if(!(rk>0)) return ''; var over=rk/bal*100>(PREFS.dailyLimitPct||6);
+      return '<div style="font-size:10px;font-family:var(--mono);color:' + (over?'var(--red)':'var(--amber)') + ';margin-bottom:2px">● Open risk: ' + money(rk,a.currency) + ' (' + round(rk/bal*100,1) + '%)</div>'; })() +
     '<div class="divider" style="margin:8px 0"></div>' +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' + actions + '</div></div>';
 }

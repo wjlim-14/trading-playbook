@@ -81,7 +81,7 @@ function loadMockData() {
     { id:'x5', accountId:'a4', type:'DEPOSIT',     amount:5000,  fee:0,  date:'2026-05-05', notes:'Seed',            createdAt:'2026-05-05' }
   ];
   TRADES = _mockTrades();
-  PREFS = { defaultRiskPct:2, dailyLimitPct:6, mode:'LIVE', activeAccountId:null };
+  PREFS = { defaultRiskPct:2, dailyLimitPct:6, mode:'LIVE', activeAccountId:null, baseCurrency:'USD' };
 }
 
 function _mk(o) {

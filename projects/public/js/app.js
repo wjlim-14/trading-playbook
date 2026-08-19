@@ -72,8 +72,8 @@ function _renderSwitcherBalance() {
   var el = document.getElementById('acct-switch-bal');
   if (!el) return;
   if (ACTIVE_ACCOUNT === 'all') {
-    var total = envAccountsLive().reduce(function(s,a){ return s + accountBalance(a.id); }, 0);
-    el.textContent = money(total, 'USD') + ' total';
+    var total = consolidatedBalanceBase();
+    el.textContent = '≈ ' + money(total, baseCurrency()) + ' ' + baseCurrency();
   } else {
     var a = getAccount(ACTIVE_ACCOUNT);
     el.textContent = a ? money(accountBalance(a.id), a.currency, 2) + ' ' + a.currency : '—';
@@ -95,10 +95,10 @@ function _renderSidebarHeat() {
   var val = document.getElementById('sb-heat-val');
   var pctOfLimit = h.limit ? Math.min(100, h.pct / h.limit * 100) : 0;
   if (fill) fill.style.width = pctOfLimit + '%';
-  if (val) val.innerHTML = 'Open Risk: <span>' + money(h.risk,'USD') + ' (' + h.pct + '%)</span> of ' + h.limit + '%';
+  if (val) val.innerHTML = 'Open Risk: <span>' + money(h.risk,h.currency) + ' (' + h.pct + '%)</span> of ' + h.limit + '%';
   // topbar heat badge
   var tb = document.getElementById('topbar-heat-txt');
-  if (tb) tb.textContent = activeTrades().length + ' Active · ' + money(h.risk,'USD') + ' Heat';
+  if (tb) tb.textContent = activeTrades().length + ' Active · ' + money(h.risk,h.currency) + ' Heat';
 }
 function _renderNavBadges() {
   var hb = document.getElementById('badge-holdings');
