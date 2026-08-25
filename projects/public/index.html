@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/base.css?v=12">
-  <link rel="stylesheet" href="css/layout.css?v=12">
-  <link rel="stylesheet" href="css/components.css?v=12">
+  <link rel="stylesheet" href="css/base.css?v=13">
+  <link rel="stylesheet" href="css/layout.css?v=13">
+  <link rel="stylesheet" href="css/components.css?v=13">
 </head>
 <body>
 
@@ -52,6 +52,10 @@
       <div class="nav-item" data-page="p-journal" onclick="nav('p-journal')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         Journal<span class="nav-badge" id="badge-journal" style="display:none">0</span>
+      </div>
+      <div class="nav-item" data-page="p-mindset" onclick="nav('p-mindset')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1v.2h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>
+        Mindset
       </div>
 
       <div class="sb-sec">Management</div>
@@ -105,6 +109,7 @@
       <div class="page" id="p-calculator"></div>
       <div class="page" id="p-holdings"></div>
       <div class="page" id="p-journal"></div>
+      <div class="page" id="p-mindset"></div>
       <div class="page" id="p-accounts"></div>
       <div class="page" id="p-backtest"></div>
       <div class="page" id="p-settings"></div>
@@ -146,19 +151,20 @@
   </div>
 
   <!-- Scripts — load order matters -->
-  <script src="js/data.js?v=12"></script>
-  <script src="js/utils.js?v=12"></script>
-  <script src="js/charts.js?v=12"></script>
-  <script src="js/ui.js?v=12"></script>
-  <script src="js/router.js?v=12"></script>
-  <script src="pages/dashboard.js?v=12"></script>
-  <script src="pages/calculator.js?v=12"></script>
-  <script src="pages/holdings.js?v=12"></script>
-  <script src="pages/journal.js?v=12"></script>
-  <script src="pages/accounts.js?v=12"></script>
-  <script src="pages/backtest.js?v=12"></script>
-  <script src="pages/settings.js?v=12"></script>
-  <script src="js/app.js?v=12"></script>
+  <script src="js/data.js?v=13"></script>
+  <script src="js/utils.js?v=13"></script>
+  <script src="js/charts.js?v=13"></script>
+  <script src="js/ui.js?v=13"></script>
+  <script src="js/router.js?v=13"></script>
+  <script src="pages/dashboard.js?v=13"></script>
+  <script src="pages/calculator.js?v=13"></script>
+  <script src="pages/holdings.js?v=13"></script>
+  <script src="pages/journal.js?v=13"></script>
+  <script src="pages/mindset.js?v=13"></script>
+  <script src="pages/accounts.js?v=13"></script>
+  <script src="pages/backtest.js?v=13"></script>
+  <script src="pages/settings.js?v=13"></script>
+  <script src="js/app.js?v=13"></script>
 
 </body>
 </html>

@@ -10,6 +10,7 @@ var _apiAvailable = false;
 var ACCOUNTS     = [];   // Account[]
 var TRADES       = [];   // TradeRecord[]  (LIVE + BACKTEST, filtered per view)
 var TRANSACTIONS = [];   // AccountTransaction[]
+var WISDOM       = [];   // Wisdom[]  (saved quotes + lessons — global)
 var PREFS        = { defaultRiskPct: 2, dailyLimitPct: 6, mode: 'LIVE', activeAccountId: null };
 
 var MODE           = 'LIVE';   // 'LIVE' | 'BACKTEST'
@@ -25,11 +26,12 @@ function _initData() {
     getJson('/api/accounts'),
     getJson('/api/trades'),
     getJson('/api/transactions'),
-    getJson('/api/prefs')
+    getJson('/api/prefs'),
+    getJson('/api/wisdom')
   ]).then(function(res) {
     var val = function(r){ return r.status === 'fulfilled' ? r.value : null; };
-    var acc = val(res[0]), tr = val(res[1]), tx = val(res[2]), pr = val(res[3]);
-    res.forEach(function(r,i){ if (r.status==='rejected') console.warn('[J.Tradebook] endpoint failed:', ['accounts','trades','transactions','prefs'][i], r.reason && r.reason.message); });
+    var acc = val(res[0]), tr = val(res[1]), tx = val(res[2]), pr = val(res[3]), wz = val(res[4]);
+    res.forEach(function(r,i){ if (r.status==='rejected') console.warn('[J.Tradebook] endpoint failed:', ['accounts','trades','transactions','prefs','wisdom'][i], r.reason && r.reason.message); });
 
     // Backend is "reachable" if the core endpoints (accounts/trades) responded.
     var reachable = acc !== null || tr !== null;
@@ -44,6 +46,7 @@ function _initData() {
     ACCOUNTS     = acc || [];
     TRADES       = tr  || [];
     TRANSACTIONS = tx  || [];
+    WISDOM       = wz  || [];
     PREFS        = Object.assign({ defaultRiskPct:2, dailyLimitPct:6 }, pr || {});
     MODE = PREFS.mode || 'LIVE';
     if (PREFS.activeAccountId && ACCOUNTS.some(function(a){return a.id===PREFS.activeAccountId;})) {
@@ -82,6 +85,20 @@ function loadMockData() {
   ];
   TRADES = _mockTrades();
   PREFS = { defaultRiskPct:2, dailyLimitPct:6, mode:'LIVE', activeAccountId:null, baseCurrency:'USD' };
+  WISDOM = _mockWisdom();
+}
+
+function _mockWisdom() {
+  var now = Date.now();
+  function w(o, agoDays){ return Object.assign({ id:_demoId('w'), favorite:false, author:'', title:'', category:'', createdAt:new Date(now - agoDays*86400000).toISOString() }, o); }
+  return [
+    w({ kind:'quote', text:'Plan the trade, and trade the plan.', author:'Trading maxim', category:'Discipline', favorite:true }, 1),
+    w({ kind:'quote', text:'Cut your losses short and let your winners run.', author:'Trading maxim', category:'Risk', favorite:true }, 3),
+    w({ kind:'quote', text:'The market can stay irrational longer than you can stay solvent.', author:'John Maynard Keynes', category:'Psychology' }, 6),
+    w({ kind:'lesson', title:'No revenge trades', text:'After a red trade I forced a second entry that was not there and gave back the whole day. New rule: one loss = step away 30 minutes before the next setup.', category:'Mindset', favorite:true }, 2),
+    w({ kind:'lesson', title:'Size down when conviction is low', text:'My worst drawdowns all came from full size on B-grade setups. If it is not an A setup, cut the risk in half.', category:'Risk' }, 5),
+    w({ kind:'quote', text:'Amateurs think about how much they can make. Professionals think about how much they can lose.', author:'Jack Schwager', category:'Risk' }, 9)
+  ];
 }
 
 function _mk(o) {
@@ -251,6 +268,20 @@ function apiUpdateTrade(t)  {
 function apiDeleteTrade(id) {
   if (DEMO_MODE) { _remove(TRADES, id); return Promise.resolve(); }
   return _req('/api/trades', 'DELETE', { id: id }).then(function(){ _remove(TRADES, id); });
+}
+
+/* ── WISDOM (quotes + lessons) ── */
+function apiCreateWisdom(w) {
+  if (DEMO_MODE) { var row = Object.assign({ id:_demoId('w'), favorite:!!w.favorite, createdAt:new Date().toISOString() }, w); WISDOM.unshift(row); return Promise.resolve(row); }
+  return _req('/api/wisdom', 'POST', w).then(function(row){ if(row) WISDOM.unshift(row); return row; });
+}
+function apiUpdateWisdom(w) {
+  if (DEMO_MODE) { var cur = WISDOM.find(function(x){return x.id===w.id;}); if(cur) Object.assign(cur, w); return Promise.resolve(cur); }
+  return _req('/api/wisdom', 'PATCH', w).then(function(row){ if(row) _replace(WISDOM, row); return row; });
+}
+function apiDeleteWisdom(id) {
+  if (DEMO_MODE) { _remove(WISDOM, id); return Promise.resolve(); }
+  return _req('/api/wisdom', 'DELETE', { id: id }).then(function(){ _remove(WISDOM, id); });
 }
 
 /* ── ACCOUNTS ── */
