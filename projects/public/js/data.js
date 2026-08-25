@@ -248,8 +248,19 @@ function _req(path, method, body) {
   if (body !== undefined) opt.body = JSON.stringify(body);
   return fetch(path, opt).then(function(r) {
     if (r.status === 204) return null;
-    if (!r.ok) return r.json().then(function(j){ throw new Error(j.error || r.status); });
-    return r.json();
+    // Read as text first so a non-JSON error page (e.g. Vercel 404 HTML) never
+    // blows up JSON.parse with a confusing "Unexpected token" message.
+    return r.text().then(function(txt) {
+      var data = null;
+      try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
+      if (!r.ok) {
+        var msg = (data && data.error) ? data.error
+          : (r.status === 404 ? 'API not found (' + path + ') — deploy the latest build first'
+                              : 'Server error ' + r.status);
+        throw new Error(msg);
+      }
+      return data;
+    });
   });
 }
 
