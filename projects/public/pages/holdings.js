@@ -73,17 +73,21 @@ function holdingRow(t) {
     right = '<div class="tpnl ' + pnlClass(tradePnL(t)) + '">' + moneySigned(tradePnL(t),cur) + '</div>';
   } else {
     var realized = tradeRealizedPnL(t);
+    var mark = tradeMark(t);
     infoFields =
       '<div class="tf"><div class="tfl">Avg Entry</div><div class="tfv">' + fmtN(tradeAvgEntry(t)) + '</div></div>' +
       '<div class="tf"><div class="tfl">Open</div><div class="tfv">' + fmtN(tradeOpenSize(t)) + ' ' + meta.unit.toLowerCase() + '</div></div>' +
       '<div class="tf"><div class="tfl">SL</div><div class="tfv">' + fmtN(t.stopLossPrice) + '</div></div>' +
       '<div class="tf"><div class="tfl">Open Risk</div><div class="tfv text-neg">' + money(tradeOpenRisk(t),cur) + '</div></div>' +
-      (st==='PARTIAL' ? '<div class="tf"><div class="tfl">Booked</div><div class="tfv ' + pnlClass(realized) + '">' + moneySigned(realized,cur) + '</div></div>' : '');
+      (st==='PARTIAL' ? '<div class="tf"><div class="tfl">Booked</div><div class="tfv ' + pnlClass(realized) + '">' + moneySigned(realized,cur) + '</div></div>' : '') +
+      (mark!=null ? '<div class="tf"><div class="tfl">Unrealized</div><div class="tfv ' + pnlClass(tradeUnrealized(t,mark)) + '">' + moneySigned(tradeUnrealized(t,mark),cur) + '</div></div>' : '');
     if (t.status === 'PLANNING')
       actionBtn = '<button class="btn btn-green btn-sm" onclick="event.stopPropagation();markExecuted(\'' + t.id + '\')">✓ Executed</button>';
     else
       actionBtn = '<button class="btn btn-red btn-sm" onclick="event.stopPropagation();openPartialModal(\'' + t.id + '\')">Take Profit</button>';
-    right = gradePill('Entry', t.entryGrade);
+    right = mark!=null
+      ? '<div class="tpnl ' + pnlClass(tradeTotalPnL(t,mark)) + '" title="Total P&L (booked + unrealized)">' + moneySigned(tradeTotalPnL(t,mark),cur) + '</div>'
+      : gradePill('Entry', t.entryGrade);
   }
 
   return '<div class="tcard">' +
@@ -106,6 +110,7 @@ function holdingDetail(t, st) {
     shotsGridHtml(t, 'pre', true);
 
   var fills = fillsHistory(t);
+  var livePnl = livePnlBlock(t, st);
 
   var actions = '';
   if (t.status === 'PLANNING') {
@@ -129,11 +134,65 @@ function holdingDetail(t, st) {
 
   return charts +
     (reasons ? '<div class="ptags">' + reasons + '</div>' : '') +
+    livePnl +
     fills +
     '<div class="rfbox"><div class="rfl">Setup Notes</div>' +
       '<textarea class="rfinp" onblur="saveSetupNotes(\'' + t.id + '\',this.value)" placeholder="Setup notes…">' + escapeHtml(t.setupNotes||'') + '</textarea></div>' +
     tradeLogHtml(t) +
     actions;
+}
+
+/* ── LIVE / MARK P&L (open trades) ── */
+function livePnlBlock(t, st) {
+  if (st !== 'ACTIVE' && st !== 'PARTIAL') return '';
+  var acc = getAccount(t.accountId), cur = acc ? acc.currency : 'USD';
+  var feed = priceFeed(t), mark = tradeMark(t);
+  var liveBtn = feed
+    ? '<button class="btn btn-ghost btn-sm" onclick="fetchLivePrice(\'' + t.id + '\')">↻ Live · ' + (feed==='crypto'?'Binance':'Finnhub') + '</button>'
+    : '<span style="font-size:10px;color:var(--muted)">manual only (no free feed for ' + escapeHtml(assetClassMeta(assetClassOf(t)).label.split(' ')[0]) + ')</span>';
+  return '<div class="rfbox" style="margin-top:8px"><div class="rfl">Live P&amp;L <span style="color:var(--muted);font-weight:400">· mark to current price</span></div>' +
+    '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">' +
+      '<div class="field" style="max-width:170px;margin:0"><div class="fl">Current price</div>' +
+        '<input class="fi" id="mark-' + t.id + '" value="' + (mark!=null?fmtN(mark):'') + '" placeholder="type or fetch" ' +
+        'oninput="markInput(\'' + t.id + '\',this.value)" onblur="markSave(\'' + t.id + '\',this.value)"></div>' +
+      liveBtn +
+    '</div>' +
+    '<div id="live-out-' + t.id + '">' + liveOutHtml(t, cur) + '</div>' +
+  '</div>';
+}
+function liveOutHtml(t, cur) {
+  var mark = tradeMark(t);
+  if (mark == null) return '<div style="font-size:11px;color:var(--muted)">Enter a current price' + (priceFeed(t)?' or press Live':'') + ' to see unrealized P&L.</div>';
+  var u = tradeUnrealized(t, mark), ur = tradeUnrealR(t, mark), tot = tradeTotalPnL(t, mark);
+  return '<div class="cout" style="grid-template-columns:1fr 1fr 1fr;margin:0">' +
+    '<div class="oi"><div class="ol">Unrealized</div><div class="ov ' + pnlClass(u) + '">' + moneySigned(u, cur) + '</div></div>' +
+    '<div class="oi"><div class="ol">Unrealized R</div><div class="ov ' + pnlClass(ur) + '">' + rStr(ur) + '</div></div>' +
+    '<div class="oi"><div class="ol">Total P&L</div><div class="ov ' + pnlClass(tot) + '">' + moneySigned(tot, cur) + '</div></div>' +
+  '</div>';
+}
+function markInput(id, val) {
+  var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
+  var v = parseFloat(val);
+  t.currentPrice = isFinite(v) ? v : null;   // local only; persisted on blur
+  var acc = getAccount(t.accountId), cur = acc ? acc.currency : 'USD';
+  var out = document.getElementById('live-out-' + id); if (out) out.innerHTML = liveOutHtml(t, cur);
+}
+function markSave(id, val) {
+  var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
+  var v = parseFloat(val);
+  apiUpdateTrade({ id:id, currentPrice: isFinite(v) ? v : null });
+}
+function fetchLivePrice(id) {
+  var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
+  var feed = priceFeed(t); if (!feed) { toast('No live feed for this market','err'); return; }
+  toast('Fetching live price…','');
+  apiFetchPrice(feed, t.ticker).then(function(r){
+    if (!r || r.error || r.price == null) { toast('Live price unavailable' + (r&&r.error?': '+r.error:''), 'err'); return; }
+    t.currentPrice = r.price;
+    apiUpdateTrade({ id:id, currentPrice: r.price });
+    toast(t.ticker + ' · ' + fmtN(r.price) + ' (' + r.source + ')', 'ok');
+    _afterMutation(); renderHoldings();
+  }).catch(function(){ toast('Live fetch failed — deploy backend & set FINNHUB_KEY','err'); });
 }
 
 /* Timestamped audit trail (Malaysia time), newest first. */
@@ -210,7 +269,8 @@ function confirmDeleteTrade(id) { apiDeleteTrade(id).then(function(){ closeModal
 var _add = null;
 function openAddModal(id) {
   var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
-  var avg = tradeAvgEntry(t) || t.entryPrice || 0;
+  var mk = tradeMark(t);
+  var avg = mk != null ? mk : (tradeAvgEntry(t) || t.entryPrice || 0);
   _add = { id:id, method:'pct', pct:30, riskMode:'dol', riskAmt:'', price: round(avg, priceDp(avg)), size:0, note:'' };
   addComputeSize();
   openModal({

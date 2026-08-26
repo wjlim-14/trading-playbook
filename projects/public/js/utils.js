@@ -231,6 +231,12 @@ function tradeUnrealized(t, mark) {
 }
 /* Running profit = realized (banked from partials) + unrealized (open, marked to `mark`). */
 function tradeRunningProfit(t, mark) { return round((tradeRealizedPnL(t) || 0) + tradeUnrealized(t, mark), 2); }
+/* Current mark price stored on the trade (manual or live-fetched). */
+function tradeMark(t) { return (t.currentPrice != null && isFinite(+t.currentPrice)) ? +t.currentPrice : null; }
+/* Which live feed applies: crypto=Binance, US stock=Finnhub, else null (manual only). */
+function priceFeed(t) { var c = assetClassOf(t); return c === 'CRYPTO' ? 'crypto' : (c === 'US_STOCK' ? 'stock' : null); }
+function tradeUnrealR(t, mark) { var risk = tradePlannedRisk(t); if (!risk) return null; return round(tradeUnrealized(t, mark) / risk, 2); }
+function tradeTotalPnL(t, mark) { return round((tradeRealizedPnL(t) || 0) + tradeUnrealized(t, mark), 2); }
 
 /* ── TIMEFRAMES & CHART SCREENSHOTS ──
    Each trade picks a High + Low timeframe. Screenshots are flexible arrays

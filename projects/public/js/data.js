@@ -106,7 +106,7 @@ function _mk(o) {
   return Object.assign({
     mode:'LIVE', entryReasonTags:[], mistakeTags:[], reviewComplete:false,
     preChartUrl4H:null, preChartUrl1H:null, postChartUrl4H:null, postChartUrl1H:null,
-    tfHigh:'4h', tfLow:'1h', preShots:[], postShots:[],
+    tfHigh:'4h', tfLow:'1h', preShots:[], postShots:[], currentPrice:null,
     setupNotes:'', reflectionNote:'', log:[]
   }, o);
 }
@@ -324,6 +324,11 @@ function apiSavePrefs(p) {
   PREFS = Object.assign({}, PREFS, p);
   if (DEMO_MODE) return Promise.resolve(PREFS);
   return _req('/api/prefs', 'PUT', PREFS).catch(function(e){ console.warn('prefs save failed', e); });
+}
+
+/* ── LIVE PRICE (crypto=Binance, stock=Finnhub) ── */
+function apiFetchPrice(type, symbol) {
+  return _req('/api/price?type=' + encodeURIComponent(type) + '&symbol=' + encodeURIComponent(symbol), 'GET');
 }
 
 /* ── IMAGE UPLOAD (base64 -> storage) ── */
