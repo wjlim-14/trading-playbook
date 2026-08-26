@@ -106,7 +106,7 @@ function _mk(o) {
   return Object.assign({
     mode:'LIVE', entryReasonTags:[], mistakeTags:[], reviewComplete:false,
     preChartUrl4H:null, preChartUrl1H:null, postChartUrl4H:null, postChartUrl1H:null,
-    tfHigh:'4h', tfLow:'1h', preShots:[], postShots:[], currentPrice:null,
+    tfHigh:'4h', tfLow:'1h', preShots:[], postShots:[], currentPrice:null, manageEvents:[],
     setupNotes:'', reflectionNote:'', log:[]
   }, o);
 }

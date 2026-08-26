@@ -387,7 +387,10 @@ function tradeReportViewBody(t) {
     '<div class="rep-lbl">Takeaway</div><div class="rep-note">' + (escapeHtml(t.reflectionNote||'') || '<span class="rep-muted">—</span>') + '</div>' +
   '</div>';
 
-  return head + tiles + numbers + pre + post + reportFills(t) + tradeLogHtml(t);
+  var manageInner = (typeof manageTimelineInner === 'function') ? manageTimelineInner(t) : '';
+  var manage = manageInner ? '<div class="rep-sec"><div class="rep-sech">IN-TRADE MANAGEMENT</div>' + manageInner + '</div>' : '';
+
+  return head + tiles + numbers + pre + manage + post + reportFills(t) + tradeLogHtml(t);
 }
 
 /* ── REPORT · EDIT (review form) ── */

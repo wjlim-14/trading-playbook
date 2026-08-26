@@ -67,6 +67,7 @@ function toDb(t) {
     mistakeTags:     'mistake_tags',
     reflectionNote:  'reflection_note',
     reviewComplete:  'review_complete',
+    manageEvents:    'manage_events',
     log:             'log'
   };
   var row = {};
@@ -122,6 +123,7 @@ function fromDb(row) {
     mistakeTags:     row.mistake_tags || [],
     reflectionNote:  row.reflection_note || '',
     reviewComplete:  !!row.review_complete,
+    manageEvents:    row.manage_events || [],
     log:             row.log || [],
     createdAt:       row.created_at || null
   };

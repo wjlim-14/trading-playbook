@@ -242,6 +242,8 @@ function tradeMark(t) { return (t.currentPrice != null && isFinite(+t.currentPri
 function priceFeed(t) { var c = assetClassOf(t); return c === 'CRYPTO' ? 'crypto' : (c === 'US_STOCK' ? 'stock' : null); }
 function tradeUnrealR(t, mark) { var risk = tradePlannedRisk(t); if (!risk) return null; return round(tradeUnrealized(t, mark) / risk, 2); }
 function tradeTotalPnL(t, mark) { return round((tradeRealizedPnL(t) || 0) + tradeUnrealized(t, mark), 2); }
+/* In-trade management decisions (move stop, re-entry, partial, note). */
+function tradeManageEvents(t) { return (t.manageEvents && t.manageEvents.length) ? t.manageEvents : []; }
 
 /* ── TIMEFRAMES & CHART SCREENSHOTS ──
    Each trade picks a High + Low timeframe. Screenshots are flexible arrays
