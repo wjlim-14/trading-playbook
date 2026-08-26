@@ -41,19 +41,24 @@ function cashflowNet(accountId) {
     }, 0);
 }
 
-/* Realized trading PnL for an account (LIVE only by default). */
+/* Banked (realized) trading PnL for an account, for a given env (LIVE/BACKTEST).
+   Counts CLOSED trades AND the booked portion of PARTIAL trades — i.e. cash
+   actually taken off the table. Defaults to the account's own env. */
 function accountRealizedPnL(accountId, mode) {
-  mode = mode || 'LIVE';
+  var a = getAccount(accountId);
+  mode = mode || (a && a.env) || 'LIVE';
   return TRADES.filter(function(t){
-    return t.accountId === accountId && t.mode === mode && t.status === 'CLOSED';
-  }).reduce(function(s, t){ return s + (tradePnL(t) || 0); }, 0);
+    var s = tradeStatus(t);
+    return t.accountId === accountId && t.mode === mode && (s === 'CLOSED' || s === 'PARTIAL');
+  }).reduce(function(sum, t){ return sum + (tradeRealizedPnL(t) || 0); }, 0);
 }
 
-/* Current balance = start + realized trading PnL + deposits - withdrawals - fees */
+/* Current balance = start + banked trading PnL (this account's env) + deposits - withdrawals - fees.
+   A BACKTEST account reflects BACKTEST trades; a LIVE account reflects LIVE trades. */
 function accountBalance(accountId) {
   var a = getAccount(accountId);
   if (!a) return 0;
-  return a.initialBalance + accountRealizedPnL(accountId, 'LIVE') + cashflowNet(accountId);
+  return a.initialBalance + accountRealizedPnL(accountId, a.env || 'LIVE') + cashflowNet(accountId);
 }
 
 /* Equity used for position sizing (the live balance of the selected account). */

@@ -38,7 +38,7 @@ function renderAccounts() {
 
 function accountCard(a) {
   var bal = accountBalance(a.id);
-  var tradePnL = accountRealizedPnL(a.id,'LIVE');
+  var tradePnL = accountRealizedPnL(a.id, a.env || 'LIVE');
   var deposits = TRANSACTIONS.filter(function(t){return t.accountId===a.id && (t.type==='DEPOSIT'||t.type==='PROP_PAYOUT');}).reduce(function(s,t){return s+t.amount;},0);
   var withdrawals = TRANSACTIONS.filter(function(t){return t.accountId===a.id && t.type==='WITHDRAWAL';}).reduce(function(s,t){return s+t.amount;},0);
   var fees = TRANSACTIONS.filter(function(t){return t.accountId===a.id;}).reduce(function(s,t){return s+(t.fee||0)+(t.type==='FEE_ADJUSTMENT'?t.amount:0);},0);
