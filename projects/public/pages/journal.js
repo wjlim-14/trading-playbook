@@ -309,15 +309,25 @@ function reportShotsHtml(t, stage) {
 function reportFills(t) {
   var e = tradeEntries(t), x = tradeExits(t);
   if (!e.length && !x.length) return '';
-  function row(kind, l, cls){
-    return '<div class="rep-fill"><span class="rep-fk ' + cls + '">' + kind + '</span>' +
+  var acc = getAccount(t.accountId), cur = acc ? acc.currency : 'USD';
+  function row(kind, l, cls, i){
+    var cost = fillNotional(t, l.size, l.price);
+    var rp = cls==='out' ? legRealized(t, l) : null;
+    return '<div class="rep-fill"><span class="rep-fk ' + cls + '">' + kind + ' #' + i + '</span>' +
       '<span class="rep-fp">' + fmtN(l.size) + ' @ ' + fmtN(l.price) + '</span>' +
+      '<span class="rep-fc">' + (cls==='out'?'↩ ':'') + money(cost, cur) + '</span>' +
+      (rp!=null ? '<span class="rep-frp ' + pnlClass(rp) + '">' + moneySigned(rp, cur) + '</span>' : '') +
       '<span class="rep-ft">' + (l.time?fmtMYT(l.time):'') + '</span>' +
       (l.note ? '<span class="rep-fn">' + escapeHtml(l.note) + '</span>' : '') + '</div>';
   }
-  var rows = e.map(function(l){ return row('IN', l, 'in'); }).join('') +
-             x.map(function(l){ return row('OUT', l, 'out'); }).join('');
-  return '<div class="rep-sec"><div class="rep-sech">EXECUTION</div><div class="rep-fills">' + rows + '</div></div>';
+  var rows = e.map(function(l,i){ return row('IN', l, 'in', i+1); }).join('') +
+             x.map(function(l,i){ return row('OUT', l, 'out', i+1); }).join('');
+  var cap = '<div class="rep-cap">' +
+    '<span>Deployed <b>' + money(tradeDeployed(t), cur) + '</b></span>' +
+    '<span>Taken back <b>' + money(tradeTakenBack(t), cur) + '</b></span>' +
+    '<span>Booked <b class="' + pnlClass(tradeRealizedPnL(t)||0) + '">' + moneySigned(tradeRealizedPnL(t)||0, cur) + '</b></span>' +
+  '</div>';
+  return '<div class="rep-sec"><div class="rep-sech">EXECUTION &amp; CAPITAL</div><div class="rep-fills">' + rows + '</div>' + cap + '</div>';
 }
 
 /* ── REPORT · VIEW (read-only, report level) ── */

@@ -151,16 +151,37 @@ function tradeLogHtml(t) {
 function fillsHistory(t) {
   var e = tradeEntries(t), x = tradeExits(t);
   if (!e.length && !x.length) return '';
+  var acc = getAccount(t.accountId), cur = acc ? acc.currency : 'USD';
   var rows = [];
-  e.forEach(function(l){ rows.push(fillLine('IN', l, 'var(--green)')); });
-  x.forEach(function(l){ rows.push(fillLine('OUT', l, 'var(--red)')); });
-  return '<div class="rfbox" style="margin-top:8px"><div class="rfl">Fills</div>' +
-    '<div style="display:flex;flex-direction:column;gap:3px;font-family:var(--mono);font-size:11px">' + rows.join('') + '</div></div>';
+  e.forEach(function(l, i){ rows.push(fillLine('IN #' + (i+1), l, 'var(--green)', cur, t)); });
+  x.forEach(function(l, i){ rows.push(fillLine('OUT #' + (i+1), l, 'var(--red)', cur, t)); });
+
+  var deployed = tradeDeployed(t), takenBack = tradeTakenBack(t), openCost = tradeOpenCost(t), realized = tradeRealizedPnL(t) || 0;
+  var summary =
+    '<div class="fill-sum">' +
+      capCell('Capital deployed', money(deployed, cur)) +
+      capCell('Taken back', money(takenBack, cur)) +
+      capCell('Still in market', money(openCost, cur)) +
+      capCell('Booked P&L', moneySigned(realized, cur), pnlClass(realized)) +
+    '</div>';
+
+  return '<div class="rfbox" style="margin-top:8px"><div class="rfl">Fills &amp; Capital</div>' +
+    '<div style="display:flex;flex-direction:column;gap:4px">' + rows.join('') + '</div>' + summary + '</div>';
 }
-function fillLine(kind, l, color) {
-  return '<div style="display:flex;gap:8px"><span style="color:' + color + ';font-weight:700;width:30px">' + kind + '</span>' +
-    '<span>' + fmtN(l.size) + ' @ ' + fmtN(l.price) + '</span>' +
-    (l.note ? '<span style="color:var(--muted)">· ' + escapeHtml(l.note) + '</span>' : '') + '</div>';
+function fillLine(kind, l, color, cur, t) {
+  var cost = fillNotional(t, l.size, l.price);
+  var isOut = kind.indexOf('OUT') === 0;
+  var rp = isOut ? legRealized(t, l) : null;
+  return '<div class="fill-row">' +
+    '<span class="fill-k" style="color:' + color + '">' + kind + '</span>' +
+    '<span class="fill-sz">' + fmtN(l.size) + ' @ ' + fmtN(l.price) + '</span>' +
+    '<span class="fill-cost">' + (isOut ? '↩ ' : '') + money(cost, cur) + '</span>' +
+    (rp != null ? '<span class="fill-pnl ' + pnlClass(rp) + '">' + moneySigned(rp, cur) + '</span>' : '<span class="fill-pnl"></span>') +
+    (l.note ? '<span class="fill-note">' + escapeHtml(l.note) + '</span>' : '') +
+  '</div>';
+}
+function capCell(label, val, cls) {
+  return '<div class="cap-cell"><div class="cap-l">' + label + '</div><div class="cap-v ' + (cls||'') + '">' + val + '</div></div>';
 }
 
 /* ── EXECUTE ── */
@@ -185,29 +206,142 @@ function deleteTrade(id) {
 }
 function confirmDeleteTrade(id) { apiDeleteTrade(id).then(function(){ closeModal(); toast('Deleted','ok'); _afterMutation(); renderHoldings(); }); }
 
-/* ── ADD TO POSITION ── */
+/* ── ADD TO POSITION (mini position-sizer) ── */
+var _add = null;
 function openAddModal(id) {
   var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
+  var avg = tradeAvgEntry(t) || t.entryPrice || 0;
+  _add = { id:id, method:'pct', pct:30, riskMode:'dol', riskAmt:'', price: round(avg, priceDp(avg)), size:0, note:'' };
+  addComputeSize();
   openModal({
     title: 'Add to ' + escapeHtml(t.ticker),
-    body:
-      '<div class="cg2"><div class="field"><div class="fl">Add Size (' + assetClassMeta(assetClassOf(t)).unit.toLowerCase() + ')</div><input class="fi" id="add-size" placeholder="' + fmtN(t.positionSize) + '"></div>' +
-      '<div class="field"><div class="fl">Fill Price</div><input class="fi" id="add-price" value="' + fmtN(t.entryPrice) + '"></div></div>' +
-      '<div class="field"><div class="fl">Note</div><input class="fi" id="add-note" placeholder="e.g. added on breakout retest"></div>' +
-      '<div class="isolation-note">Averages your entry and increases open risk.</div>',
-    footer:'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-green" onclick="confirmAdd(\'' + id + '\')">Add</button>'
+    width: 580,
+    body: '<div id="add-wrap">' + addBody() + '</div>',
+    footer:'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-green" onclick="confirmAdd()">Add to position</button>'
   });
 }
-function confirmAdd(id) {
-  var t = TRADES.find(function(x){ return x.id===id; });
-  var size = parseFloat(document.getElementById('add-size').value);
-  var price = parseFloat(document.getElementById('add-price').value);
-  if (!isFinite(size) || size<=0 || !isFinite(price)) { toast('Enter size & price','err'); return; }
+function _addTrade() { return TRADES.find(function(x){ return x.id===_add.id; }); }
+function addComputeSize() {
+  var t = _addTrade(); var price = parseFloat(_add.price);
+  var open = tradeOpenSize(t), vpp = tradeVPP(t, price), size = 0;
+  if (_add.method === 'pct') {
+    size = open * (parseFloat(_add.pct)||0) / 100;
+  } else if (_add.method === 'risk') {
+    var riskAmt = _add.riskMode === 'pct' ? (accountBalance(t.accountId) * (parseFloat(_add.riskAmt)||0)/100) : (parseFloat(_add.riskAmt)||0);
+    var sl = t.stopLossPrice;
+    if (isFinite(price) && sl != null && Math.abs(price - sl) > 0 && vpp > 0) size = riskAmt / (Math.abs(price - sl) * vpp);
+  } else if (_add.method === 'profit') {
+    var prof = tradeRunningProfit(t, price);
+    if (prof > 0 && isFinite(price) && price > 0 && vpp > 0) size = prof / (price * vpp);
+  }
+  _add.size = (size > 0 && isFinite(size)) ? round(size, 4) : 0;
+}
+function addBody() {
+  var t = _addTrade();
+  var acc = getAccount(t.accountId), cur = acc ? acc.currency : 'USD';
+  var meta = assetClassMeta(assetClassOf(t)), unit = meta.unit.toLowerCase();
+  var open = tradeOpenSize(t), avg = tradeAvgEntry(t);
+  var running = tradeRunningProfit(t, parseFloat(_add.price));
+
+  var stats =
+    '<div class="add-stats">' +
+      capCell('Open ' + unit, fmtN(open)) +
+      capCell('Avg entry', fmtN(avg)) +
+      capCell('Open risk', money(tradeOpenRisk(t), cur), 'r') +
+      capCell('Running P&L', moneySigned(running, cur), pnlClass(running)) +
+    '</div>';
+
+  var tabs = '<div class="rtog" style="margin:10px 0 8px">' +
+    [['pct','% of open'],['risk','By risk'],['profit','Reinvest P&L']].map(function(m){
+      return '<button class="rtbtn' + (_add.method===m[0]?' active':'') + '" onclick="addMethod(\'' + m[0] + '\')">' + m[1] + '</button>';
+    }).join('') + '</div>';
+
+  var controls = '';
+  if (_add.method === 'pct') {
+    controls =
+      '<div class="fl" style="margin-bottom:4px">Portion of open position: <b>' + (parseFloat(_add.pct)||0) + '%</b></div>' +
+      '<input class="rng" type="range" min="0" max="100" step="5" value="' + (parseFloat(_add.pct)||0) + '" oninput="addSetPct(this.value)">' +
+      '<div style="display:flex;gap:6px;margin-top:6px">' + [20,30,40,50].map(function(p){
+        return '<button class="btn btn-ghost btn-sm" style="flex:1" onclick="addSetPct(' + p + ')">' + p + '%</button>'; }).join('') + '</div>';
+  } else if (_add.method === 'risk') {
+    var slTxt = t.stopLossPrice != null ? fmtN(t.stopLossPrice) : '— set a stop first';
+    controls =
+      '<div class="rtog" style="margin-bottom:8px">' +
+        '<button class="rtbtn' + (_add.riskMode==='dol'?' active':'') + '" onclick="addRiskMode(\'dol\')">' + curSym(cur) + ' amount</button>' +
+        '<button class="rtbtn' + (_add.riskMode==='pct'?' active':'') + '" onclick="addRiskMode(\'pct\')">% of account</button>' +
+      '</div>' +
+      '<div class="field"><div class="fl">Risk for this add ' + (_add.riskMode==='pct'?'(% of account)':'(' + curSym(cur) + ')') + '</div>' +
+        '<input class="fi" value="' + escapeHtml(String(_add.riskAmt)) + '" placeholder="' + (_add.riskMode==='pct'?'e.g. 0.5':'e.g. 100') + '" oninput="addSetRisk(this.value)"></div>' +
+      '<div class="isolation-note" style="margin-top:6px">Sizes off your current stop (' + slTxt + ') so this add stays inside its own risk budget.</div>';
+  } else {
+    var running2 = tradeRunningProfit(t, parseFloat(_add.price));
+    controls = running2 > 0
+      ? '<div class="isolation-note">Deploys your running profit (' + moneySigned(running2, cur) + ', marked at the fill price) into more ' + unit + ' — compounds the winner without adding fresh capital.</div>'
+      : '<div class="isolation-note" style="border-color:var(--red)">Running P&L is not positive yet — nothing to reinvest.</div>';
+  }
+
+  var priceSize =
+    '<div class="cg2" style="margin-top:10px">' +
+      '<div class="field"><div class="fl">Fill price</div><input class="fi" id="add-price" value="' + _add.price + '" oninput="addSetPrice(this.value)"></div>' +
+      '<div class="field"><div class="fl">Add size (' + unit + ') — editable</div><input class="fi" id="add-size" value="' + fmtN(_add.size) + '" oninput="addSetSize(this.value)"></div>' +
+    '</div>' +
+    '<div class="field" style="margin-top:8px"><div class="fl">Note</div><input class="fi" id="add-note" value="' + escapeHtml(_add.note||'') + '" placeholder="e.g. added on breakout retest" oninput="_add.note=this.value"></div>';
+
+  return stats + tabs + controls + priceSize + '<div id="add-out">' + addOutHtml() + '</div>';
+}
+function addOutHtml() {
+  var t = _addTrade();
+  var acc = getAccount(t.accountId), cur = acc ? acc.currency : 'USD';
+  var price = parseFloat(_add.price), size = parseFloat(_add.size);
+  if (!(isFinite(price) && isFinite(size) && size > 0)) {
+    return '<div class="cout" style="margin-top:12px"><div class="oi"><div class="ol">Enter a valid size</div><div class="ov">—</div></div></div>';
+  }
+  var entries = (t.entries && t.entries.length ? t.entries.slice() : tradeEntries(t).slice());
+  entries.push({ size:size, price:price });
+  var tmp = Object.assign({}, t, { entries: entries });
+  var newAvg = tradeAvgEntry(tmp), newOpen = tradeOpenSize(tmp);
+  var addCost = fillNotional(t, size, price);
+  var riskBefore = tradeOpenRisk(t), riskAfter = tradeOpenRisk(tmp);
+
+  // account heat after this add
+  var eq = accountBalance(t.accountId) || 0;
+  var acctRiskAfter = (accountOpenRisk(t.accountId) - riskBefore) + riskAfter;
+  var heatAfter = eq > 0 ? round(acctRiskAfter / eq * 100, 1) : 0;
+  var limit = (PREFS && PREFS.dailyLimitPct) || 6;
+  var over = heatAfter > limit;
+
+  function oi(l,v,cls){ return '<div class="oi"><div class="ol">' + l + '</div><div class="ov ' + (cls||'') + '">' + v + '</div></div>'; }
+  return '<div class="cout" style="grid-template-columns:1fr 1fr 1fr;margin-top:12px">' +
+      oi('New avg entry', fmtN(newAvg)) +
+      oi('New open size', fmtN(newOpen)) +
+      oi('Add cost', money(addCost, cur)) +
+    '</div>' +
+    '<div class="cout" style="grid-template-columns:1fr 1fr;margin-top:8px">' +
+      oi('Trade risk after', money(riskAfter, cur) + ' (was ' + money(riskBefore, cur) + ')', 'r') +
+      oi('Account heat after', heatAfter + '% of ' + limit + '%', over ? 'r' : '') +
+    '</div>' +
+    (over ? '<div class="isolation-note" style="border-color:var(--red);color:var(--red);margin-top:6px">⚠ This add pushes account heat over your ' + limit + '% limit.</div>' : '');
+}
+function addRerender(){ var w = document.getElementById('add-wrap'); if (w) w.innerHTML = addBody(); }
+function addPaintLive(){
+  var sz = document.getElementById('add-size'); if (sz && document.activeElement !== sz) sz.value = fmtN(_add.size);
+  var out = document.getElementById('add-out'); if (out) out.innerHTML = addOutHtml();
+}
+function addMethod(m){ _add.method = m; addComputeSize(); addRerender(); }
+function addRiskMode(m){ _add.riskMode = m; addComputeSize(); addRerender(); }
+function addSetPct(v){ _add.pct = v; addComputeSize(); addRerender(); }
+function addSetRisk(v){ _add.riskAmt = v; addComputeSize(); addPaintLive(); }
+function addSetPrice(v){ _add.price = v; addComputeSize(); addPaintLive(); }
+function addSetSize(v){ _add.size = parseFloat(v)||0; var out=document.getElementById('add-out'); if(out) out.innerHTML=addOutHtml(); }
+function confirmAdd() {
+  var t = _addTrade();
+  var size = parseFloat(_add.size), price = parseFloat(_add.price);
+  if (!isFinite(size) || size<=0 || !isFinite(price)) { toast('Enter a valid size & price','err'); return; }
   var entries = (t.entries&&t.entries.length?t.entries.slice():tradeEntries(t).slice());
-  var addNote = document.getElementById('add-note').value.trim();
-  entries.push({ size:size, price:price, time:nowIso(), note:addNote });
-  saveTradeLog({ id:id, entries:entries, status:'ACTIVE' },
-    'Added ' + size + ' @ ' + price + (addNote?' · '+addNote:'')).then(function(){
+  entries.push({ size:size, price:price, time:nowIso(), note:(_add.note||'').trim() });
+  var methodTxt = _add.method==='pct' ? _add.pct+'% of open' : (_add.method==='risk'?'risk-based':'reinvest P&L');
+  saveTradeLog({ id:t.id, entries:entries, status:'ACTIVE' },
+    'Added ' + fmtN(size) + ' @ ' + price + ' (' + methodTxt + ')' + (_add.note?' · '+_add.note.trim():'')).then(function(){
     closeModal(); toast('Added to position','ok'); _afterMutation(); renderHoldings();
   }).catch(function(e){ toast('Failed: '+e.message,'err'); });
 }
@@ -217,34 +351,56 @@ var _partial = null;
 function openPartialModal(id) {
   var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
   var openSz = tradeOpenSize(t);
-  _partial = { id:id, size: round(openSz/2,4), price: t.targetPrice!=null?t.targetPrice:t.entryPrice };
+  var acc = getAccount(t.accountId), cur = acc?acc.currency:'USD';
+  _partial = { id:id, pct:30, size: round(openSz*0.3,4), price: t.targetPrice!=null?t.targetPrice:t.entryPrice };
   openModal({
     title: 'Take profit · ' + escapeHtml(t.ticker),
+    width: 560,
     body:
-      '<div class="field"><div class="fl">Portion of open (' + fmtN(openSz) + ')</div><div style="display:flex;gap:6px;margin-top:5px">' +
-        [25,50,75,100].map(function(p){ return '<button class="btn btn-ghost btn-sm" style="flex:1" onclick="partialPct(' + p + ')">' + p + '%</button>'; }).join('') + '</div></div>' +
-      '<div class="cg2"><div class="field"><div class="fl">Close Size</div><input class="fi" id="p-size" value="' + _partial.size + '" oninput="_partial.size=parseFloat(this.value);partialPaint()"></div>' +
-      '<div class="field"><div class="fl">Exit Price</div><input class="fi" id="p-price" value="' + _partial.price + '" oninput="_partial.price=parseFloat(this.value);partialPaint()"></div></div>' +
+      '<div class="fl" style="margin-bottom:4px">Close <b id="p-pctlbl">' + _partial.pct + '%</b> of open (' + fmtN(openSz) + ' ' + assetClassMeta(assetClassOf(t)).unit.toLowerCase() + ')</div>' +
+      '<input class="rng" id="p-slider" type="range" min="0" max="100" step="5" value="' + _partial.pct + '" oninput="partialSlide(this.value)">' +
+      '<div style="display:flex;gap:6px;margin-top:6px">' +
+        [30,40,50,100].map(function(p){ return '<button class="btn btn-ghost btn-sm" style="flex:1" onclick="partialSlide(' + p + ')">' + p + '%</button>'; }).join('') +
+      '</div>' +
+      '<div class="cg2" style="margin-top:10px"><div class="field"><div class="fl">Close size</div><input class="fi" id="p-size" value="' + _partial.size + '" oninput="partialSetSize(this.value)"></div>' +
+      '<div class="field"><div class="fl">Exit price</div><input class="fi" id="p-price" value="' + _partial.price + '" oninput="_partial.price=parseFloat(this.value);partialPaint()"></div></div>' +
       '<div class="field"><div class="fl">Note</div><input class="fi" id="p-note" placeholder="e.g. secured initial capital, runner on"></div>' +
-      '<div class="cout" style="grid-template-columns:1fr 1fr;margin:4px 0 0"><div class="oi"><div class="ol">Booked PnL</div><div class="ov" id="p-pnl">—</div></div>' +
-        '<div class="oi"><div class="ol">Remaining Open</div><div class="ov" id="p-rem">—</div></div></div>',
+      '<div class="cout" style="grid-template-columns:1fr 1fr 1fr;margin:4px 0 0">' +
+        '<div class="oi"><div class="ol">Booked P&L</div><div class="ov" id="p-pnl">—</div></div>' +
+        '<div class="oi"><div class="ol">Taken back</div><div class="ov" id="p-cap">—</div></div>' +
+        '<div class="oi"><div class="ol">Remaining</div><div class="ov" id="p-rem">—</div></div></div>',
     footer:'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="confirmPartial()">Book it</button>',
     onMount: partialPaint
   });
 }
-function partialPct(p) {
+function partialSlide(p) {
   var t = TRADES.find(function(x){ return x.id===_partial.id; });
-  _partial.size = round(tradeOpenSize(t) * p/100, 4);
-  var i=document.getElementById('p-size'); if(i)i.value=_partial.size; partialPaint();
+  _partial.pct = parseFloat(p)||0;
+  _partial.size = round(tradeOpenSize(t) * _partial.pct/100, 4);
+  var i=document.getElementById('p-size'); if(i)i.value=_partial.size;
+  var s=document.getElementById('p-slider'); if(s)s.value=_partial.pct;
+  var l=document.getElementById('p-pctlbl'); if(l)l.textContent=_partial.pct+'%';
+  partialPaint();
+}
+function partialSetSize(v) {
+  var t = TRADES.find(function(x){ return x.id===_partial.id; });
+  _partial.size = parseFloat(v)||0;
+  var open = tradeOpenSize(t);
+  _partial.pct = open>0 ? round(_partial.size/open*100,0) : 0;
+  var s=document.getElementById('p-slider'); if(s)s.value=_partial.pct;
+  var l=document.getElementById('p-pctlbl'); if(l)l.textContent=_partial.pct+'%';
+  partialPaint();
 }
 function partialPaint() {
   var t = TRADES.find(function(x){ return x.id===_partial.id; });
   var acc = getAccount(t.accountId), cur = acc?acc.currency:'USD';
   var avg = tradeAvgEntry(t), dir = dirSign(t), vpp = tradeVPP(t, _partial.price);
   var pnl = (isFinite(_partial.size)&&isFinite(_partial.price)) ? round(_partial.size*(_partial.price-avg)*dir*vpp,2) : null;
+  var cap = (isFinite(_partial.size)&&isFinite(_partial.price)) ? round(_partial.size*vpp*_partial.price,2) : null;
   var rem = round(tradeOpenSize(t) - (_partial.size||0), 4);
-  var pe=document.getElementById('p-pnl'), re=document.getElementById('p-rem');
+  var pe=document.getElementById('p-pnl'), ce=document.getElementById('p-cap'), re=document.getElementById('p-rem');
   if (pe){ pe.textContent = pnl==null?'—':moneySigned(pnl,cur); pe.className='ov '+pnlClass(pnl); }
+  if (ce) ce.textContent = cap==null?'—':money(cap,cur);
   if (re) re.textContent = isFinite(rem)?fmtN(rem):'—';
 }
 function confirmPartial() {

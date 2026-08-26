@@ -216,6 +216,22 @@ function tradeVPP(t, price) {
 }
 function dirSign(t) { return t.direction === 'SHORT' ? -1 : 1; }
 
+/* ── CAPITAL / COST per fill and running profit ──
+   Notional (position value / cash cost for stocks) = size × valuePerPoint × price. */
+function fillNotional(t, size, price) { return (+size||0) * tradeVPP(t, price) * (+price||0); }
+function tradeDeployed(t)  { return round(tradeEntries(t).reduce(function(s,l){ return s + fillNotional(t, l.size, l.price); }, 0), 2); }   // capital put in
+function tradeTakenBack(t) { return round(tradeExits(t).reduce(function(s,l){ return s + fillNotional(t, l.size, l.price); }, 0), 2); }   // proceeds returned
+function tradeOpenCost(t)  { var a = tradeAvgEntry(t); return a==null ? 0 : round(tradeOpenSize(t) * tradeVPP(t, a) * a, 2); }            // capital still in market (cost basis)
+function legRealized(t, leg) { var avg = tradeAvgEntry(t); if (avg==null) return null; return round((+leg.size||0) * ((+leg.price||0) - avg) * dirSign(t) * tradeVPP(t, leg.price), 2); }
+/* Unrealized on the still-open shares, marked at `mark`. */
+function tradeUnrealized(t, mark) {
+  var open = tradeOpenSize(t); if (open <= 0 || mark==null || !isFinite(+mark)) return 0;
+  var avg = tradeAvgEntry(t); if (avg==null) return 0;
+  return round(open * ((+mark) - avg) * dirSign(t) * tradeVPP(t, mark), 2);
+}
+/* Running profit = realized (banked from partials) + unrealized (open, marked to `mark`). */
+function tradeRunningProfit(t, mark) { return round((tradeRealizedPnL(t) || 0) + tradeUnrealized(t, mark), 2); }
+
 /* ── TIMEFRAMES & CHART SCREENSHOTS ──
    Each trade picks a High + Low timeframe. Screenshots are flexible arrays
    {url, tf, note} for pre-trade (setup) and post-trade (review). Old fixed
