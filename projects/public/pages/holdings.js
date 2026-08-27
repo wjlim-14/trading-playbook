@@ -123,7 +123,6 @@ function holdingDetail(t, st) {
         '<button class="btn btn-gold btn-sm" onclick="openPartialModal(\'' + t.id + '\')">Take partial</button>' +
         '<button class="btn btn-ghost btn-sm" onclick="openStopModal(\'' + t.id + '\')">Move stop</button>' +
         '<button class="btn btn-red btn-sm" onclick="openCloseModal(\'' + t.id + '\')">Close all</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="openDecisionModal(\'' + t.id + '\')">🗒 Log decision</button>' +
         '<button class="btn btn-ghost btn-sm" onclick="openEditFillsModal(\'' + t.id + '\', renderHoldings)">✎ Edit fills</button>' +
       '</div>';
   } else if (st === 'CLOSED') {
@@ -247,7 +246,7 @@ function capCell(label, val, cls) {
 
 /* ══ IN-TRADE MANAGEMENT JOURNAL ══
    Reusable "reason + screenshots" capture used by Move Stop, Add/Re-entry,
-   Partial and a standalone Log decision. Events render as a timeline on the
+   Partial and Close. Events render as a timeline on the
    open trade and inside the closed-trade report.                         */
 var _evShots = [];   // local screenshots while a capture modal is open
 function evReset(){ _evShots = []; }
@@ -275,31 +274,13 @@ function _pushManageEvent(id, ev){
   arr.push(ev);
   return arr;
 }
-/* ── standalone "Log decision" ── */
-function openDecisionModal(id){
-  var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
-  evReset();
-  openModal({
-    title: 'Log decision · ' + escapeHtml(t.ticker), width: 560,
-    body: '<div class="field"><div class="fl">Decision / observation</div>' +
-        '<textarea class="rfinp" id="d-note" placeholder="e.g. price stalling at resistance, watching for rejection before adding"></textarea></div>' +
-        '<div class="fl" style="margin:8px 0 5px">Screenshots (optional)</div>' + evStripHtml(),
-    footer: '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>' +
-            '<button class="btn btn-gold" onclick="confirmDecision(\'' + id + '\')">Save</button>',
-    onMount: evWire
-  });
-}
-function confirmDecision(id){
-  var note = (document.getElementById('d-note').value||'').trim();
-  if (!note && !_evShots.length) { toast('Add a note or a screenshot','err'); return; }
-  var ev = { time:nowIso(), kind:'note', note:note, shots:_evShots.slice() };
-  saveTradeLog({ id:id, manageEvents:_pushManageEvent(id, ev) }, 'Decision · ' + (note||'(screenshot)')).then(function(){
-    closeModal(); toast('Logged','ok'); _afterMutation(); renderHoldings();
-  }).catch(function(e){ toast('Failed: '+e.message,'err'); });
-}
 /* ── timeline display ── */
-function evLabel(k){ return { stop:'Moved stop', reentry:'Re-entry / add', partial:'Took partial', note:'Decision', close:'Closed' }[k] || k; }
-function evIcon(k){ return { stop:'🛡', reentry:'➕', partial:'💰', note:'🗒', close:'🏁' }[k] || '•'; }
+function evLabel(ev){
+  var k = (typeof ev === 'string') ? ev : ev.kind;
+  if (k === 'stop' && ev && ev.riskFree) return 'Stop → risk-free';
+  return { stop:'Moved stop', reentry:'Re-entry / add', partial:'Took partial', breakeven:'Breakeven', close:'Closed' }[k] || k;
+}
+function evIcon(k){ return { stop:'🛡', reentry:'➕', partial:'💰', breakeven:'🟰', close:'🏁' }[k] || '•'; }
 function manageTimelineInner(t){
   var evs = tradeManageEvents(t); if (!evs.length) return '';
   var rows = evs.map(function(ev, idx){ return { ev:ev, idx:idx }; }).reverse().map(function(o){
@@ -310,9 +291,9 @@ function manageTimelineInner(t){
     var meta = ev.kind==='stop'
       ? ('SL → ' + fmtN(ev.price))
       : (ev.price!=null ? (ev.size!=null?fmtN(ev.size)+' @ ':'@ ') + fmtN(ev.price) : '');
-    return '<div class="ev-item"><div class="ev-dot">' + evIcon(ev.kind) + '</div>' +
+    return '<div class="ev-item"><div class="ev-dot">' + evIcon(ev.riskFree?'breakeven':ev.kind) + '</div>' +
       '<div class="ev-body">' +
-        '<div class="ev-head"><b>' + evLabel(ev.kind) + '</b>' + (meta?' <span class="ev-meta">' + meta + '</span>':'') +
+        '<div class="ev-head"><b>' + evLabel(ev) + '</b>' + (meta?' <span class="ev-meta">' + meta + '</span>':'') +
           '<span class="ev-time">' + (ev.time?fmtMYT(ev.time):'') + '</span></div>' +
         (ev.note ? '<div class="ev-note">' + escapeHtml(ev.note) + '</div>' : '') +
         (shots ? '<div class="ev-shots">' + shots + '</div>' : '') +
@@ -505,6 +486,7 @@ function openPartialModal(id) {
   var openSz = tradeOpenSize(t);
   var acc = getAccount(t.accountId), cur = acc?acc.currency:'USD';
   _partial = { id:id, pct:30, size: round(openSz*0.3,4), price: t.targetPrice!=null?t.targetPrice:t.entryPrice };
+  evReset();
   openModal({
     title: 'Take profit · ' + escapeHtml(t.ticker),
     width: 560,
@@ -516,13 +498,14 @@ function openPartialModal(id) {
       '</div>' +
       '<div class="cg2" style="margin-top:10px"><div class="field"><div class="fl">Close size</div><input class="fi" id="p-size" value="' + _partial.size + '" oninput="partialSetSize(this.value)"></div>' +
       '<div class="field"><div class="fl">Exit price</div><input class="fi" id="p-price" value="' + _partial.price + '" oninput="_partial.price=parseFloat(this.value);partialPaint()"></div></div>' +
-      '<div class="field"><div class="fl">Note</div><input class="fi" id="p-note" placeholder="e.g. secured initial capital, runner on"></div>' +
-      '<div class="cout" style="grid-template-columns:1fr 1fr 1fr;margin:4px 0 0">' +
+      '<div class="cout" style="grid-template-columns:1fr 1fr 1fr;margin:4px 0 8px">' +
         '<div class="oi"><div class="ol">Booked P&L</div><div class="ov" id="p-pnl">—</div></div>' +
         '<div class="oi"><div class="ol">Taken back</div><div class="ov" id="p-cap">—</div></div>' +
-        '<div class="oi"><div class="ol">Remaining</div><div class="ov" id="p-rem">—</div></div></div>',
+        '<div class="oi"><div class="ol">Remaining</div><div class="ov" id="p-rem">—</div></div></div>' +
+      '<div class="field"><div class="fl">Why take partial?</div><input class="fi" id="p-note" placeholder="e.g. hit 2R, banking half, runner to next level"></div>' +
+      '<div class="fl" style="margin:8px 0 5px">Screenshots (optional)</div>' + evStripHtml(),
     footer:'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="confirmPartial()">Book it</button>',
-    onMount: partialPaint
+    onMount: function(){ partialPaint(); evWire(); }
   });
 }
 function partialSlide(p) {
@@ -565,7 +548,7 @@ function confirmPartial() {
   var pnote = document.getElementById('p-note').value.trim();
   exits.push({ size:size, price:price, time:nowIso(), note:pnote });
   var remaining = round(openSz - size, 6);
-  var evP = { time:nowIso(), kind:(remaining<=1e-6?'close':'partial'), price:price, size:size, note:pnote, shots:[] };
+  var evP = { time:nowIso(), kind:(remaining<=1e-6?'close':'partial'), price:price, size:size, note:pnote, shots:_evShots.slice() };
   var patch = { id:_partial.id, exits:exits, exitTimestamp: nowIso(), manageEvents:_pushManageEvent(_partial.id, evP) };
   if (remaining <= 1e-6) {
     patch.status = 'CLOSED';
@@ -702,9 +685,13 @@ function confirmStop(id) {
   var sl = parseFloat(document.getElementById('s-sl').value);
   if (!isFinite(sl)) { toast('Enter a stop price','err'); return; }
   var why = (document.getElementById('s-why').value||'').trim();
-  var ev = { time:nowIso(), kind:'stop', price:sl, note:why, shots:_evShots.slice() };
+  var t = TRADES.find(function(x){ return x.id===id; });
+  var avg = tradeAvgEntry(t);
+  // risk-free when the stop reaches/passes average entry (long: SL>=avg, short: SL<=avg)
+  var riskFree = avg != null && (dirSign(t) > 0 ? sl >= avg - 1e-9 : sl <= avg + 1e-9);
+  var ev = { time:nowIso(), kind:'stop', price:sl, note:why, riskFree:riskFree, shots:_evShots.slice() };
   saveTradeLog({ id:id, stopLossPrice:sl, manageEvents:_pushManageEvent(id, ev) },
-    'Moved stop to ' + sl + (why?' · '+why:'')).then(function(){ closeModal(); toast('Stop moved','ok'); _afterMutation(); renderHoldings(); });
+    (riskFree?'Stop to risk-free ':'Moved stop to ') + sl + (why?' · '+why:'')).then(function(){ closeModal(); toast(riskFree?'Stop risk-free':'Stop moved','ok'); _afterMutation(); renderHoldings(); });
 }
 
 /* ── CLOSE ALL ── */
@@ -712,6 +699,7 @@ var _closeState = null;
 function openCloseModal(id) {
   var t = TRADES.find(function(x){ return x.id===id; }); if (!t) return;
   _closeState = { id:id, exit: t.targetPrice!=null?t.targetPrice:tradeAvgEntry(t) };
+  evReset();
   openModal({
     title: 'Close all · ' + escapeHtml(t.ticker) + ' (' + fmtN(tradeOpenSize(t)) + ' open)',
     body:
@@ -720,10 +708,12 @@ function openCloseModal(id) {
         '<button class="btn btn-red btn-sm" style="flex:1" onclick="closePreset(' + t.stopLossPrice + ')">Hit SL</button>' +
         '<button class="btn btn-ghost btn-sm" style="flex:1" onclick="closePreset(' + tradeAvgEntry(t) + ')">Breakeven</button></div></div>' +
       '<div class="field"><div class="fl">Exit Price</div><input class="fi" id="close-exit" value="' + fmtN(_closeState.exit) + '" oninput="_closeState.exit=parseFloat(this.value);closePaint()"></div>' +
-      '<div class="cout" style="grid-template-columns:1fr 1fr;margin:6px 0 0"><div class="oi"><div class="ol">Realized R (total)</div><div class="ov" id="close-r">—</div></div>' +
-        '<div class="oi"><div class="ol">Realized PnL (total)</div><div class="ov" id="close-pnl">—</div></div></div>',
+      '<div class="cout" style="grid-template-columns:1fr 1fr;margin:6px 0 8px"><div class="oi"><div class="ol">Realized R (total)</div><div class="ov" id="close-r">—</div></div>' +
+        '<div class="oi"><div class="ol">Realized PnL (total)</div><div class="ov" id="close-pnl">—</div></div></div>' +
+      '<div class="field"><div class="fl">Why close?</div><input class="fi" id="close-why" placeholder="e.g. lower-low broke the trend, taking it off"></div>' +
+      '<div class="fl" style="margin:8px 0 5px">Screenshots (optional)</div>' + evStripHtml(),
     footer:'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-gold" onclick="confirmClose()">Close trade</button>',
-    onMount: closePaint
+    onMount: function(){ closePaint(); evWire(); }
   });
 }
 function closePreset(p){ _closeState.exit=p; var i=document.getElementById('close-exit'); if(i)i.value=fmtN(p); closePaint(); }
@@ -750,7 +740,8 @@ function confirmClose() {
   var tmp = Object.assign({}, t, { exits: exits });
   var pnl = tradeRealizedPnL(tmp), risk = tradePlannedRisk(tmp);
   var rMult = pnl!=null&&risk?round(pnl/risk,2):null;
-  var evC = { time:nowIso(), kind:'close', price:exit, size:tradeOpenSize(t), note:'closed all', shots:[] };
+  var cwhy = (document.getElementById('close-why') ? document.getElementById('close-why').value : '').trim();
+  var evC = { time:nowIso(), kind:'close', price:exit, size:tradeOpenSize(t), note:cwhy||'closed all', shots:_evShots.slice() };
   saveTradeLog({ id:t.id, status:'CLOSED', exits:exits, exitPrice:exit, exitTimestamp:nowIso(),
     realizedPnL: pnl, realizedR: rMult, manageEvents:_pushManageEvent(t.id, evC) },
     'Closed all @ ' + exit + ' · ' + rStr(rMult) + ' · PnL ' + moneySigned(pnl, (getAccount(t.accountId)||{}).currency||'USD')).then(function(){
