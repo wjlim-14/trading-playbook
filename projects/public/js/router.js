@@ -1,10 +1,10 @@
 /* ============================================================
    J.TRADEBOOK V2 — ROUTER
    ============================================================ */
-var PAGE_IDS = ['p-dashboard','p-calculator','p-holdings','p-journal','p-mindset','p-accounts','p-backtest','p-settings'];
+var PAGE_IDS = ['p-dashboard','p-calculator','p-holdings','p-journal','p-mindset','p-indices','p-accounts','p-backtest','p-settings'];
 var PAGE_TITLES = {
   'p-dashboard':'Dashboard', 'p-calculator':'Calculator', 'p-holdings':'Holdings',
-  'p-journal':'Journal', 'p-mindset':'Mindset', 'p-accounts':'Accounts & Cash Flow', 'p-backtest':'Backtest Journal', 'p-settings':'Settings'
+  'p-journal':'Journal', 'p-mindset':'Mindset', 'p-indices':'Indices', 'p-accounts':'Accounts & Cash Flow', 'p-backtest':'Backtest Journal', 'p-settings':'Settings'
 };
 var _currentPage = 'p-dashboard';
 
@@ -32,6 +32,7 @@ function renderPage(id) {
     case 'p-holdings':   renderHoldings();   break;
     case 'p-journal':    renderJournal();    break;
     case 'p-mindset':    renderMindset();    break;
+    case 'p-indices':    renderIndices();    break;
     case 'p-accounts':   renderAccounts();   break;
     case 'p-backtest':   renderBacktest();   break;
     case 'p-settings':   renderSettings();   break;
