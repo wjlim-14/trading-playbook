@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/base.css?v=20">
-  <link rel="stylesheet" href="css/layout.css?v=20">
-  <link rel="stylesheet" href="css/components.css?v=20">
+  <link rel="stylesheet" href="css/base.css?v=21">
+  <link rel="stylesheet" href="css/layout.css?v=21">
+  <link rel="stylesheet" href="css/components.css?v=21">
 </head>
 <body>
 
@@ -60,6 +60,10 @@
       <div class="nav-item" data-page="p-indices" onclick="nav('p-indices')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
         Indices
+      </div>
+      <div class="nav-item" data-page="p-ladder" onclick="nav('p-ladder')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8"/><path d="M8 9h8"/><path d="M8 15h8"/><path d="M8 21h8"/><path d="M8 3v18"/><path d="M16 3v18"/></svg>
+        Ladder
       </div>
 
       <div class="sb-sec">Management</div>
@@ -115,6 +119,7 @@
       <div class="page" id="p-journal"></div>
       <div class="page" id="p-mindset"></div>
       <div class="page" id="p-indices"></div>
+      <div class="page" id="p-ladder"></div>
       <div class="page" id="p-accounts"></div>
       <div class="page" id="p-backtest"></div>
       <div class="page" id="p-settings"></div>
@@ -156,21 +161,22 @@
   </div>
 
   <!-- Scripts — load order matters -->
-  <script src="js/data.js?v=20"></script>
-  <script src="js/utils.js?v=20"></script>
-  <script src="js/charts.js?v=20"></script>
-  <script src="js/ui.js?v=20"></script>
-  <script src="js/router.js?v=20"></script>
-  <script src="pages/dashboard.js?v=20"></script>
-  <script src="pages/calculator.js?v=20"></script>
-  <script src="pages/holdings.js?v=20"></script>
-  <script src="pages/journal.js?v=20"></script>
-  <script src="pages/mindset.js?v=20"></script>
-  <script src="pages/indices.js?v=20"></script>
-  <script src="pages/accounts.js?v=20"></script>
-  <script src="pages/backtest.js?v=20"></script>
-  <script src="pages/settings.js?v=20"></script>
-  <script src="js/app.js?v=20"></script>
+  <script src="js/data.js?v=21"></script>
+  <script src="js/utils.js?v=21"></script>
+  <script src="js/charts.js?v=21"></script>
+  <script src="js/ui.js?v=21"></script>
+  <script src="js/router.js?v=21"></script>
+  <script src="pages/dashboard.js?v=21"></script>
+  <script src="pages/calculator.js?v=21"></script>
+  <script src="pages/holdings.js?v=21"></script>
+  <script src="pages/journal.js?v=21"></script>
+  <script src="pages/mindset.js?v=21"></script>
+  <script src="pages/indices.js?v=21"></script>
+  <script src="pages/ladder.js?v=21"></script>
+  <script src="pages/accounts.js?v=21"></script>
+  <script src="pages/backtest.js?v=21"></script>
+  <script src="pages/settings.js?v=21"></script>
+  <script src="js/app.js?v=21"></script>
 
 </body>
 </html>
